@@ -1,0 +1,210 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum AppType {
+  DIRECT_REGISTRATION
+  PARTIAL_ALIENATION
+  TOTAL_ALIENATION
+  STATE_LAND
+  PARTITION
+  MORTGAGE
+  TRANSFORMATION
+}
+
+enum AppStatus {
+  DRAFT
+  SUBMITTED
+  RECEIPTED
+  PUBLISHED
+  BOARD_SCHEDULED
+  SURVEYED
+  REGIONAL_REVIEW
+  OPPOSITION_WINDOW
+  CLEARED
+  TITLE_ISSUED
+  QUERIED
+  REJECTED
+}
+
+// ─── Models ───────────────────────────────────────────────────────────────────
+
+model User {
+  id              String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  role            String
+  region          String
+  hashed_password String
+  full_name       String
+  id_card_no      String?
+  phone           String?
+  email           String?
+
+  applications   Application[]
+  issued_titles  Title[]        @relation("Issuer")
+  survey_reports SurveyReport[]
+  approvals      Approval[]
+}
+
+model Role {
+  id   String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name String @unique
+}
+
+model Application {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  type         AppType
+  status       AppStatus @default(DRAFT)
+  applicant_id String    @db.Uuid
+  parcel_id    String?   @db.Uuid
+  reference_no String?
+  fee_amount   Int?
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @updatedAt
+
+  applicant      User                  @relation(fields: [applicant_id], references: [id])
+  parcel         Parcel?               @relation(fields: [parcel_id], references: [id])
+  documents      ApplicationDocument[]
+  survey_reports SurveyReport[]
+  approvals      Approval[]
+}
+
+model ApplicationDocument {
+  id             String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  application_id String  @db.Uuid
+  doc_type       String
+  file_path      String
+  verified_flag  Boolean @default(false)
+
+  application Application @relation(fields: [application_id], references: [id], onDelete: Cascade)
+}
+
+model Parcel {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  plot_no      String?
+  block_no     String?
+  division     String
+  sub_division String?
+  situation    String?
+  limits       String?
+  area_sqm     Decimal?
+  status       String   @default("PENDING")
+  created_at   DateTime @default(now())
+
+  // geom geometry(Polygon,4326) is added via raw SQL — Prisma cannot express PostGIS types
+  applications Application[]
+  titles       Title[]
+}
+
+model Title {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title_no             String    @unique
+  volume               String?
+  folio                String?
+  division             String
+  parcel_id            String    @db.Uuid
+  nature               String?
+  issued_by            String    @db.Uuid
+  issued_at            DateTime?
+  status               String    @default("VALID")
+  certificate_pdf_path String?
+
+  parcel       Parcel        @relation(fields: [parcel_id], references: [id])
+  issuer       User          @relation("Issuer", fields: [issued_by], references: [id])
+  owners       TitleOwner[]
+  encumbrances Encumbrance[]
+}
+
+model TitleOwner {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title_id    String    @db.Uuid
+  full_name   String
+  ancestors   String?
+  birth_place String?
+  birth_date  DateTime?
+  is_current  Boolean   @default(true)
+
+  title Title @relation(fields: [title_id], references: [id])
+}
+
+model Encumbrance {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title_id    String    @db.Uuid
+  kind        String
+  party       String?
+  status      String    @default("ACTIVE")
+  recorded_at DateTime  @default(now())
+  cleared_at  DateTime?
+
+  title Title @relation(fields: [title_id], references: [id])
+}
+
+model SurveyReport {
+  id              String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  application_id  String  @db.Uuid
+  surveyor_id     String  @db.Uuid
+  paper_format    String?
+  scale           String?
+  vertices        Json
+  persons_present Json
+
+  application Application @relation(fields: [application_id], references: [id])
+  surveyor    User        @relation(fields: [surveyor_id], references: [id])
+}
+
+model Approval {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  application_id String   @db.Uuid
+  step           String
+  actor_id       String   @db.Uuid
+  role           String
+  decision       String
+  signed_at      DateTime @default(now())
+
+  application Application @relation(fields: [application_id], references: [id])
+  actor       User        @relation(fields: [actor_id], references: [id])
+}
+
+model VerificationRequest {
+  id                String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  requester_info    Json
+  title_no          String
+  fee_status        String
+  result            String?
+  certificate_token String?
+}
+
+model Payment {
+  id           String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  purpose      String
+  amount       Int
+  provider     String
+  provider_ref String?
+  status       String
+}
+
+model AuditLog {
+  seq         BigInt   @id @default(autoincrement())
+  actor_id    String   @db.Uuid
+  actor_role  String
+  event       String
+  entity      String
+  entity_id   String
+  payload     Json
+  occurred_at DateTime @default(now())
+  prev_hash   String?
+  self_hash   String
+}
+
+model BulletinEntry {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  date      DateTime @default(now())
+  reference String
+  summary   String
+}
