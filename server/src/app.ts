@@ -2,6 +2,8 @@ import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
 import authRouter from './modules/auth/auth.routes';
+import { authMiddleware } from './middleware/auth';
+import { authorize } from './middleware/authorize';
 
 const app = express();
 
@@ -14,5 +16,10 @@ app.get('/health', (_req, res) => {
 });
 
 app.use('/auth', authRouter);
+
+// Temporary route for RBAC smoke-testing — remove before production
+app.get('/ping-protected', authMiddleware, authorize('title', 'issue'), (_req, res) => {
+  res.json({ ok: true });
+});
 
 export default app;
