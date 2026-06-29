@@ -80,13 +80,33 @@ export default function ApplyPage() {
     setActiveStep((s) => s - 1);
   }
 
+  const DOC_TYPE_MAP: Record<string, string> = {
+    id_card: 'ID_CARD',
+    site_plan: 'SITE_PLAN',
+    attestation: 'ATTESTATION',
+  };
+
   async function onSubmit(data: WizardFormData) {
     setSubmitting(true);
     setSubmitError(null);
     try {
+      // 1. Create draft application
       const createRes = await api.post<{ id: string }>('/applications', { type: data.type });
       const applicationId = createRes.data.id;
 
+      // 2. Upload each attached document via multipart/form-data
+      const docEntries = (Object.entries(data.documents) as [string, unknown][]).filter(
+        ([, file]) => file instanceof File,
+      ) as [string, File][];
+
+      for (const [key, file] of docEntries) {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('doc_type', DOC_TYPE_MAP[key] ?? key.toUpperCase());
+        await api.post(`/applications/${applicationId}/documents`, formData);
+      }
+
+      // 3. Submit — backend enforces ID_CARD + SITE_PLAN are present
       const submitRes = await api.post<{ reference_no: string }>(
         `/applications/${applicationId}/submit`,
         {},

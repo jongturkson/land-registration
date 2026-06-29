@@ -1,8 +1,9 @@
 import { Router } from 'express';
-import { login, refresh } from './auth.controller';
+import { login, refresh, register } from './auth.controller';
 
 const router = Router();
 
+router.post('/register', register);
 router.post('/login', login);
 router.post('/refresh', refresh);
 

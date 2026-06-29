@@ -17,3 +17,6 @@ yarn-debug.log*
 .idea/
 .DS_Store
 /src/generated/prisma
+
+# uploads
+uploads/

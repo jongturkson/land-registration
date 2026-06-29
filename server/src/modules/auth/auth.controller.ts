@@ -90,6 +90,49 @@ export async function login(req: Request, res: Response): Promise<void> {
   res.json({ accessToken, refreshToken, user: safeUser });
 }
 
+const registerSchema = z.object({
+  email: z.string().email('Invalid email address'),
+  password: z.string().min(8, 'Password must be at least 8 characters'),
+  full_name: z.string().min(1, 'Full name is required'),
+  phone: z.string().optional(),
+  region: z.string().min(1, 'Region is required'),
+});
+
+export async function register(req: Request, res: Response): Promise<void> {
+  const parse = registerSchema.safeParse(req.body);
+  if (!parse.success) {
+    res.status(400).json({ message: 'Invalid request', errors: parse.error.issues });
+    return;
+  }
+
+  const { email, password, full_name, phone, region } = parse.data;
+
+  const existing = await prisma.user.findFirst({ where: { email } });
+  if (existing) {
+    res.status(409).json({ message: 'An account with this email already exists' });
+    return;
+  }
+
+  const hashed_password = await argon2.hash(password);
+
+  const user = await prisma.user.create({
+    data: {
+      email,
+      hashed_password,
+      full_name,
+      phone: phone ?? null,
+      region,
+      role: 'citizen',
+    },
+  });
+
+  const { hashed_password: _pw, ...safeUser } = user;
+  const accessToken = signAccess({ id: user.id, role: user.role, region: user.region });
+  const refreshToken = signRefresh(user.id);
+
+  res.status(201).json({ accessToken, refreshToken, user: safeUser });
+}
+
 export async function refresh(req: Request, res: Response): Promise<void> {
   const parse = refreshSchema.safeParse(req.body);
   if (!parse.success) {

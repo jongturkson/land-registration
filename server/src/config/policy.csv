@@ -2,6 +2,9 @@ p, registrar, fako, title, issue
 p, registrar, fako, application, read
 p, sub_divisional_officer, fako, application, read
 p, divisional_delegate, fako, application, read
+p, registrar, fako, document, read
+p, sub_divisional_officer, fako, document, read
+p, divisional_delegate, fako, document, read
 
 g, registrar, registrar, fako
 g, sub_divisional_officer, sub_divisional_officer, fako

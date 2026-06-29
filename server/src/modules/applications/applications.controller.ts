@@ -58,6 +58,19 @@ export async function submitApplication(req: Request, res: Response): Promise<vo
     return;
   }
 
+  const docs = await prisma.applicationDocument.findMany({
+    where: { application_id: id },
+    select: { doc_type: true },
+  });
+  const docTypes = new Set(docs.map((d) => d.doc_type));
+  if (!docTypes.has('ID_CARD') || !docTypes.has('SITE_PLAN')) {
+    res.status(400).json({
+      message:
+        'Mandatory documents missing. You must upload an ID card and Site Plan before submitting.',
+    });
+    return;
+  }
+
   const reference_no = generateReferenceNo();
 
   const updated = await prisma.application.update({

@@ -108,8 +108,8 @@ export default function StepDocuments({ form }: WizardStepProps) {
       <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
         Upload scans or photographs of the required documents. Accepted formats: PDF, JPG, PNG.
       </Typography>
-      <Typography variant="caption" color="warning.main" sx={{ display: 'block', mb: 3 }}>
-        Files are saved locally for review. Upload to the registry server will be completed on Day 9.
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 3 }}>
+        ID Card and Site Plan are required before you can submit. Attestation is optional.
       </Typography>
 
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
