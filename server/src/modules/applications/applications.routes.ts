@@ -5,10 +5,13 @@ import { authorize } from '../../middleware/authorize';
 import {
   createApplication,
   submitApplication,
+  transitionApplication,
   listApplications,
+  getApplication,
   trackApplication,
 } from './applications.controller';
 import { upload, uploadDocument, downloadDocument } from './documents.controller';
+import { submitSurvey } from './survey.controller';
 
 const router = Router();
 
@@ -30,7 +33,8 @@ function handleMulterUpload(req: Request, res: Response, next: NextFunction): vo
   });
 }
 
-// Static-prefix routes must come before /:id wildcard routes
+// ── Static-prefix routes first (avoids /:id wildcard capture) ─────────────
+
 router.get(
   '/documents/:docId/download',
   authMiddleware,
@@ -38,12 +42,29 @@ router.get(
   downloadDocument,
 );
 
-// Public — declared before /:id catch-all
+// ── Public route ───────────────────────────────────────────────────────────
+
 router.get('/:id/track', trackApplication);
 
-router.post('/:id/documents', authMiddleware, handleMulterUpload, uploadDocument);
+// ── Citizen routes ─────────────────────────────────────────────────────────
+
 router.post('/', authMiddleware, createApplication);
+router.post('/:id/documents', authMiddleware, handleMulterUpload, uploadDocument);
 router.post('/:id/submit', authMiddleware, submitApplication);
+
+// ── Surveyor routes ────────────────────────────────────────────────────────
+
+router.post('/:id/survey', authMiddleware, authorize('survey', 'create'), submitSurvey);
+
+// ── Officer routes ─────────────────────────────────────────────────────────
+
+router.post(
+  '/:id/transition',
+  authMiddleware,
+  authorize('application', 'update'),
+  transitionApplication,
+);
 router.get('/', authMiddleware, authorize('application', 'read'), listApplications);
+router.get('/:id', authMiddleware, authorize('application', 'read'), getApplication);
 
 export default router;

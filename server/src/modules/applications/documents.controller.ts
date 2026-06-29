@@ -30,7 +30,13 @@ export const upload = multer({
   },
 });
 
-const VALID_DOC_TYPES = new Set(['ID_CARD', 'SITE_PLAN', 'ATTESTATION']);
+const VALID_DOC_TYPES = new Set([
+  'ID_CARD',
+  'SITE_PLAN',
+  'ATTESTATION',
+  'PROCES_VERBAL',
+  'CADASTRAL_PLAN',
+]);
 
 // POST /applications/:id/documents
 export async function uploadDocument(req: Request, res: Response): Promise<void> {
@@ -39,7 +45,8 @@ export async function uploadDocument(req: Request, res: Response): Promise<void>
 
   if (!doc_type || !VALID_DOC_TYPES.has(doc_type)) {
     res.status(400).json({
-      message: 'Invalid or missing doc_type. Accepted: ID_CARD, SITE_PLAN, ATTESTATION',
+      message:
+        'Invalid or missing doc_type. Accepted: ID_CARD, SITE_PLAN, ATTESTATION, PROCES_VERBAL, CADASTRAL_PLAN',
     });
     return;
   }
@@ -55,7 +62,8 @@ export async function uploadDocument(req: Request, res: Response): Promise<void>
     return;
   }
 
-  if (application.applicant_id !== req.user!.id) {
+  // Surveyors uploading survey documents are not the applicant — skip ownership check
+  if (req.user!.role !== 'surveyor' && application.applicant_id !== req.user!.id) {
     res.status(403).json({ message: 'Forbidden' });
     return;
   }

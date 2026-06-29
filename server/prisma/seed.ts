@@ -1,82 +1,73 @@
+/// <reference types="node" />
 import 'dotenv/config';
 import argon2 from 'argon2';
 import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../src/generated/prisma/client';
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const pool = new Pool({ connectionString: process.env['DATABASE_URL'] });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
-const ROLE_NAMES = [
-  'citizen',
-  'sub_divisional_officer',
-  'surveyor',
-  'divisional_delegate',
-  'regional_delegate',
-  'registrar',
-  'governor',
-  'chief',
-  'admin',
-] as const;
+const TEST_PASSWORD = 'Password123!';
 
-const OFFICER_ROLES = ROLE_NAMES.filter((r) => r !== 'citizen');
-
-function toTitleCase(snake: string) {
-  return snake
-    .split('_')
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(' ');
-}
+const ACCOUNTS = [
+  {
+    email: 'citizen@test.com',
+    full_name: 'Jean-Pierre Mbango',
+    role: 'citizen',
+    region: 'fako',
+  },
+  {
+    email: 'sdo@test.com',
+    full_name: 'Chief Thomas Esunge',
+    role: 'sub_divisional_officer',
+    region: 'fako',
+  },
+  {
+    email: 'surveyor@test.com',
+    full_name: 'Brice Nkemdirim',
+    role: 'surveyor',
+    region: 'fako',
+  },
+  {
+    email: 'delegate@test.com',
+    full_name: 'Paul Ekane',
+    role: 'divisional_delegate',
+    region: 'fako',
+  },
+  {
+    email: 'registrar@test.com',
+    full_name: 'Marie-Claire Mballa',
+    role: 'registrar',
+    region: 'fako',
+  },
+];
 
 async function main() {
-  const hashedPassword = await argon2.hash('password123');
+  const hashed = await argon2.hash(TEST_PASSWORD);
 
-  // Roles — upsert so re-runs are safe
-  for (const name of ROLE_NAMES) {
-    await prisma.role.upsert({ where: { name }, update: {}, create: { name } });
-  }
-  console.log(`✔ Roles seeded (${ROLE_NAMES.length})`);
-
-  // Remove previously seeded test users so the script is idempotent
-  await prisma.user.deleteMany({ where: { email: { endsWith: '@landreg.test' } } });
-
-  // One user per officer role
-  for (const roleName of OFFICER_ROLES) {
-    await prisma.user.create({
+  for (const account of ACCOUNTS) {
+    const existing = await prisma.user.findFirst({ where: { email: account.email } });
+    if (existing) {
+      console.log(`  skip (exists)  ${existing.role.padEnd(26)} ${existing.email}`);
+      continue;
+    }
+    const user = await prisma.user.create({
       data: {
-        role: roleName,
-        region: 'fako',
-        hashed_password: hashedPassword,
-        full_name: toTitleCase(roleName),
-        email: `${roleName}@landreg.test`,
+        email: account.email,
+        full_name: account.full_name,
+        role: account.role,
+        region: account.region,
+        hashed_password: hashed,
       },
     });
+    console.log(`  created        ${user.role.padEnd(26)} ${user.email}`);
   }
 
-  // Two citizen users
-  for (let i = 1; i <= 2; i++) {
-    await prisma.user.create({
-      data: {
-        role: 'citizen',
-        region: 'fako',
-        hashed_password: hashedPassword,
-        full_name: `Citizen User ${i}`,
-        email: `citizen${i}@landreg.test`,
-      },
-    });
-  }
-
-  console.log(`✔ Users seeded (${OFFICER_ROLES.length} officers + 2 citizens)`);
+  console.log(`\nAll accounts use password: ${TEST_PASSWORD}`);
 }
 
 main()
-  .then(() => {
-    console.log('Seed complete.');
-    return prisma.$disconnect();
-  })
-  .catch(async (e) => {
-    console.error(e);
-    await prisma.$disconnect();
-    process.exit(1);
-  });
+  .catch((e) => { console.error(e); process.exit(1); })
+  .finally(() => prisma.$disconnect());

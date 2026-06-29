@@ -2,10 +2,17 @@ p, registrar, fako, title, issue
 p, registrar, fako, application, read
 p, sub_divisional_officer, fako, application, read
 p, divisional_delegate, fako, application, read
+p, registrar, fako, application, update
+p, sub_divisional_officer, fako, application, update
+p, divisional_delegate, fako, application, update
 p, registrar, fako, document, read
 p, sub_divisional_officer, fako, document, read
 p, divisional_delegate, fako, document, read
+p, surveyor, fako, survey, create
+p, surveyor, fako, application, read
+p, surveyor, fako, document, read
 
 g, registrar, registrar, fako
 g, sub_divisional_officer, sub_divisional_officer, fako
 g, divisional_delegate, divisional_delegate, fako
+g, surveyor, surveyor, fako

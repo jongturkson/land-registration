@@ -3,6 +3,7 @@ import { prisma } from '../../db/prisma';
 import {
   CreateApplicationSchema,
   SubmitApplicationSchema,
+  TransitionApplicationSchema,
 } from '../../shared/schemas/application.schema';
 
 function generateReferenceNo(): string {
@@ -10,6 +11,20 @@ function generateReferenceNo(): string {
   const seq = String(Math.floor(1000 + Math.random() * 9000));
   return `APP-${year}-${seq}`;
 }
+
+// Maps new_status → a human-readable step label stored in the Approval record
+const TRANSITION_STEP: Partial<Record<string, string>> = {
+  RECEIPTED: 'Receipt Acknowledgement',
+  PUBLISHED: 'Initial Review',
+  BOARD_SCHEDULED: 'Board Scheduling',
+  SURVEYED: 'Survey Complete',
+  REGIONAL_REVIEW: 'Regional Review',
+  OPPOSITION_WINDOW: 'Opposition Window',
+  CLEARED: 'Clearance',
+  TITLE_ISSUED: 'Title Issuance',
+  QUERIED: 'Query Raised',
+  REJECTED: 'Rejection',
+};
 
 // POST /applications
 export async function createApplication(req: Request, res: Response): Promise<void> {
@@ -89,6 +104,44 @@ export async function submitApplication(req: Request, res: Response): Promise<vo
   });
 }
 
+// POST /applications/:id/transition  — officer workflow action
+export async function transitionApplication(req: Request, res: Response): Promise<void> {
+  const parse = TransitionApplicationSchema.safeParse(req.body);
+  if (!parse.success) {
+    res.status(400).json({ message: 'Invalid request', errors: parse.error.issues });
+    return;
+  }
+
+  const id = req.params['id'] as string;
+  const { new_status, decision } = parse.data;
+
+  const application = await prisma.application.findUnique({ where: { id } });
+  if (!application) {
+    res.status(404).json({ message: 'Application not found' });
+    return;
+  }
+
+  const step = TRANSITION_STEP[new_status] ?? new_status;
+
+  const [updated] = await prisma.$transaction([
+    prisma.application.update({
+      where: { id },
+      data: { status: new_status },
+    }),
+    prisma.approval.create({
+      data: {
+        application_id: id,
+        step,
+        actor_id: req.user!.id,
+        role: req.user!.role,
+        decision,
+      },
+    }),
+  ]);
+
+  res.json({ message: 'Application status updated', application: updated });
+}
+
 // GET /applications  — officer-scoped by region
 export async function listApplications(req: Request, res: Response): Promise<void> {
   const region = req.user!.region;
@@ -106,6 +159,30 @@ export async function listApplications(req: Request, res: Response): Promise<voi
   });
 
   res.json(applications);
+}
+
+// GET /applications/:id  — officer single application view with documents
+export async function getApplication(req: Request, res: Response): Promise<void> {
+  const id = req.params['id'] as string;
+
+  const application = await prisma.application.findUnique({
+    where: { id },
+    include: {
+      applicant: {
+        select: { id: true, full_name: true, email: true, role: true, region: true },
+      },
+      documents: {
+        select: { id: true, doc_type: true, verified_flag: true },
+      },
+    },
+  });
+
+  if (!application) {
+    res.status(404).json({ message: 'Application not found' });
+    return;
+  }
+
+  res.json(application);
 }
 
 // GET /applications/:id/track  — public, resolves by reference_no

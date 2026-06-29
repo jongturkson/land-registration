@@ -13,18 +13,19 @@ import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import Alert from '@mui/material/Alert';
 import api from '../lib/api';
+import { storeAuth, type OfficerUser } from '../lib/auth';
 
 const schema = z.object({
-  email:    z.string().email({ message: 'Enter a valid email' }),
+  email: z.string().email({ message: 'Enter a valid email' }),
   password: z.string().min(1, { message: 'Required' }),
 });
 
 type FormData = z.infer<typeof schema>;
 
 interface LoginResponse {
-  accessToken:  string;
+  accessToken: string;
   refreshToken: string;
-  user: { id: string; email: string; role: string; region: string };
+  user: OfficerUser;
 }
 
 export default function LoginPage() {
@@ -40,10 +41,9 @@ export default function LoginPage() {
   const mutation = useMutation({
     mutationFn: (data: FormData) =>
       api.post<LoginResponse>('/auth/login', data).then((r) => r.data),
-    onSuccess: ({ accessToken, refreshToken }) => {
-      localStorage.setItem('access_token', accessToken);
-      localStorage.setItem('refresh_token', refreshToken);
-      navigate('/dashboard');
+    onSuccess: ({ accessToken, refreshToken, user }) => {
+      storeAuth(accessToken, refreshToken, user);
+      navigate(user.role === 'surveyor' ? '/survey' : '/dashboard');
     },
     onError: (error: unknown) => {
       if (axios.isAxiosError(error)) {
