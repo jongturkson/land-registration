@@ -34,13 +34,48 @@ export async function createApplication(req: Request, res: Response): Promise<vo
     return;
   }
 
-  const { type, parcel_id } = parse.data;
+  const { type, parcel_id, applicant, land } = parse.data;
+
+  // When the wizard supplies land details, create the Parcel and link it. An
+  // explicit parcel_id (e.g. for alienation of an existing parcel) takes priority.
+  let resolvedParcelId = parcel_id;
+  if (!resolvedParcelId && land) {
+    const parcel = await prisma.parcel.create({
+      data: {
+        division: land.division,
+        ...(land.subdivision ? { sub_division: land.subdivision } : {}),
+        ...(land.plot_no ? { plot_no: land.plot_no } : {}),
+        ...(land.block_no ? { block_no: land.block_no } : {}),
+        ...(land.situation ? { situation: land.situation } : {}),
+        ...(land.nature ? { nature: land.nature } : {}),
+        ...(land.area !== undefined ? { area_sqm: land.area } : {}),
+        ...(land.limit_north ? { limit_north: land.limit_north } : {}),
+        ...(land.limit_south ? { limit_south: land.limit_south } : {}),
+        ...(land.limit_east ? { limit_east: land.limit_east } : {}),
+        ...(land.limit_west ? { limit_west: land.limit_west } : {}),
+        ...(land.developments ? { developments: land.developments } : {}),
+        ...(land.dev_value !== undefined ? { dev_value: land.dev_value } : {}),
+        ...(land.others_occupy !== undefined ? { others_occupy: land.others_occupy } : {}),
+      },
+    });
+    resolvedParcelId = parcel.id;
+  }
 
   const application = await prisma.application.create({
     data: {
       type,
       applicant_id: req.user!.id,
-      ...(parcel_id ? { parcel_id } : {}),
+      ...(resolvedParcelId ? { parcel_id: resolvedParcelId } : {}),
+      ...(applicant?.father ? { applicant_father: applicant.father } : {}),
+      ...(applicant?.mother ? { applicant_mother: applicant.mother } : {}),
+      ...(applicant?.nationality ? { applicant_nationality: applicant.nationality } : {}),
+      ...(applicant?.birth_place ? { applicant_birth_place: applicant.birth_place } : {}),
+      ...(applicant?.birth_date ? { applicant_birth_date: new Date(applicant.birth_date) } : {}),
+      ...(applicant?.profession ? { applicant_profession: applicant.profession } : {}),
+      ...(applicant?.marital_status ? { marital_status: applicant.marital_status } : {}),
+      ...(applicant?.matrimonial_regime
+        ? { matrimonial_regime: applicant.matrimonial_regime }
+        : {}),
     },
   });
 
@@ -228,7 +263,7 @@ export async function getApplication(req: Request, res: Response): Promise<void>
         select: { id: true, full_name: true, email: true, role: true, region: true },
       },
       documents: {
-        select: { id: true, doc_type: true, verified_flag: true },
+        select: { id: true, doc_type: true, original_name: true, verified_flag: true },
       },
       parcel: {
         include: {

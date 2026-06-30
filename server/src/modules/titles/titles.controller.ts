@@ -69,14 +69,28 @@ export async function issueTitle(req: Request, res: Response): Promise<void> {
           issued_by: req.user!.id,
           issued_at: new Date(),
           status: 'VALID',
+          ...(application.parcel.nature ? { nature: application.parcel.nature } : {}),
         },
       });
+
+      // Carry the applicant's civil status (captured on the Demande) onto the
+      // title owner record. "Ancestors" combines the named parents.
+      const ancestors = [application.applicant_father, application.applicant_mother]
+        .filter(Boolean)
+        .join(' & ');
 
       const owner = await tx.titleOwner.create({
         data: {
           title_id: title.id,
           full_name: application.applicant.full_name,
           is_current: true,
+          ...(ancestors ? { ancestors } : {}),
+          ...(application.applicant_birth_place
+            ? { birth_place: application.applicant_birth_place }
+            : {}),
+          ...(application.applicant_birth_date
+            ? { birth_date: application.applicant_birth_date }
+            : {}),
         },
       });
 
@@ -123,17 +137,25 @@ export async function issueTitle(req: Request, res: Response): Promise<void> {
       volume: result.title.volume,
       folio: result.title.folio,
       division: result.title.division,
+      nature: result.parcel.nature,
       parcel: {
         plot_no: result.parcel.plot_no,
         block_no: result.parcel.block_no,
         sub_division: result.parcel.sub_division,
         situation: result.parcel.situation,
         area_sqm: result.parcel.area_sqm?.toString() ?? null,
+        limit_north: result.parcel.limit_north,
+        limit_south: result.parcel.limit_south,
+        limit_east: result.parcel.limit_east,
+        limit_west: result.parcel.limit_west,
       },
       owner: {
         full_name: result.owner.full_name,
         ancestors: result.owner.ancestors,
         birth_place: result.owner.birth_place,
+        birth_date: result.owner.birth_date,
+        marital_status: result.application.marital_status,
+        nationality: result.application.applicant_nationality,
       },
       issued_at: result.title.issued_at ?? new Date(),
     });

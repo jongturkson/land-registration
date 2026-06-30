@@ -68,6 +68,17 @@ model Application {
   created_at   DateTime  @default(now())
   updated_at   DateTime  @updatedAt
 
+  // Applicant civil status (État civil du propriétaire) — captured on the
+  // Demande de Titre Foncier and carried onto the issued title's owner record
+  applicant_father       String?
+  applicant_mother       String?
+  applicant_nationality  String?
+  applicant_birth_place  String?
+  applicant_birth_date   DateTime?
+  applicant_profession   String?
+  marital_status         String?
+  matrimonial_regime     String?
+
   applicant      User                  @relation(fields: [applicant_id], references: [id])
   parcel         Parcel?               @relation(fields: [parcel_id], references: [id])
   documents      ApplicationDocument[]
@@ -80,6 +91,7 @@ model ApplicationDocument {
   application_id String  @db.Uuid
   doc_type       String
   file_path      String
+  original_name  String?
   verified_flag  Boolean @default(false)
 
   application Application @relation(fields: [application_id], references: [id], onDelete: Cascade)
@@ -96,6 +108,17 @@ model Parcel {
   area_sqm     Decimal?
   status       String   @default("PENDING")
   created_at   DateTime @default(now())
+
+  // Nature & consistency of the property and directional boundaries (Limites),
+  // as described on the Demande de Titre Foncier / Section I of the certificate
+  nature        String?
+  limit_north   String?
+  limit_south   String?
+  limit_east    String?
+  limit_west    String?
+  developments  String?
+  dev_value     Int?
+  others_occupy Boolean?
 
   // geom geometry(Polygon,4326) is added via raw SQL — Prisma cannot express PostGIS types
   applications Application[]

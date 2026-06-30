@@ -36,6 +36,7 @@ const VALID_DOC_TYPES = new Set([
   'ATTESTATION',
   'PROCES_VERBAL',
   'CADASTRAL_PLAN',
+  'OTHER',
 ]);
 
 // POST /applications/:id/documents
@@ -73,6 +74,7 @@ export async function uploadDocument(req: Request, res: Response): Promise<void>
       application_id: applicationId,
       doc_type,
       file_path: req.file.filename,
+      original_name: req.file.originalname,
     },
   });
 

@@ -25,10 +25,48 @@ export const AppStatusEnum = z.enum([
   'REJECTED',
 ]);
 
-// Used by POST /applications — type is required, parcel is optional for drafts
+// Applicant civil status (État civil du propriétaire) captured on the Demande
+const ApplicantDetailsSchema = z
+  .object({
+    father: z.string().optional(),
+    mother: z.string().optional(),
+    nationality: z.string().optional(),
+    birth_place: z.string().optional(),
+    birth_date: z.string().optional(),
+    profession: z.string().optional(),
+    marital_status: z.string().optional(),
+    matrimonial_regime: z.string().optional(),
+  })
+  .optional();
+
+// Land description — when provided, a Parcel is created and linked to the application
+const LandDetailsSchema = z
+  .object({
+    plot_no: z.string().optional(),
+    block_no: z.string().optional(),
+    subdivision: z.string().optional(),
+    division: z.string().min(1, 'Division is required'),
+    situation: z.string().optional(),
+    nature: z.string().optional(),
+    area: z.coerce.number().nonnegative().optional(),
+    limit_north: z.string().optional(),
+    limit_south: z.string().optional(),
+    limit_east: z.string().optional(),
+    limit_west: z.string().optional(),
+    developments: z.string().optional(),
+    dev_value: z.coerce.number().nonnegative().optional(),
+    others_occupy: z.boolean().optional(),
+  })
+  .optional();
+
+// Used by POST /applications — type is required, parcel is optional for drafts.
+// The public wizard additionally sends applicant civil status and land details,
+// from which a Parcel is created.
 export const CreateApplicationSchema = z.object({
   type: AppTypeEnum,
   parcel_id: z.string().uuid().optional(),
+  applicant: ApplicantDetailsSchema,
+  land: LandDetailsSchema,
 });
 
 // Used by POST /applications/:id/submit — applicant may finalise parcel before submitting
