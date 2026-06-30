@@ -29,6 +29,12 @@ interface AppDocument {
   verified_flag: boolean;
 }
 
+interface TitleSummary {
+  id: string;
+  title_no: string;
+  certificate_pdf_path: string | null;
+}
+
 interface ApplicationFull {
   id: string;
   type: string;
@@ -42,6 +48,9 @@ interface ApplicationFull {
     region: string;
   };
   documents: AppDocument[];
+  parcel: {
+    titles: TitleSummary[];
+  } | null;
 }
 
 // ── Lookup tables ──────────────────────────────────────────────────────────
@@ -139,7 +148,7 @@ export default function ApplicationDetail() {
     body: string;
     new_status: string;
     decision: string;
-    action: 'transition' | 'regional-approve';
+    action: 'transition' | 'regional-approve' | 'issue-title';
   }>({ open: false, title: '', body: '', new_status: '', decision: '', action: 'transition' });
 
   const [rejectOpen, setRejectOpen] = useState(false);
@@ -196,6 +205,25 @@ export default function ApplicationDetail() {
     },
   });
 
+  // Final statutory act — issues the Land Certificate via its own dedicated endpoint
+  // (rather than the generic transition) since it triggers PDF generation server-side.
+  const issueTitleMutation = useMutation({
+    mutationFn: () => api.post(`/applications/${id}/issue-title`).then((r) => r.data),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['application', id] });
+      void queryClient.invalidateQueries({ queryKey: ['applications'] });
+      setConfirmDialog((d) => ({ ...d, open: false }));
+      setActionError(null);
+    },
+    onError: (err: unknown) => {
+      const msg = axios.isAxiosError(err)
+        ? ((err.response?.data as { message?: string } | undefined)?.message ??
+          'Action failed. Please try again.')
+        : 'An unexpected error occurred.';
+      setActionError(msg);
+    },
+  });
+
   async function handleDownload(docId: string, docType: string) {
     setDownloadError(null);
     try {
@@ -212,6 +240,23 @@ export default function ApplicationDetail() {
       URL.revokeObjectURL(url);
     } catch {
       setDownloadError('Failed to download document. Please try again.');
+    }
+  }
+
+  async function handleDownloadCertificate(titleId: string, titleNo: string) {
+    setDownloadError(null);
+    try {
+      const res = await api.get(`/titles/${titleId}/download`, { responseType: 'blob' });
+      const url = URL.createObjectURL(res.data as Blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `${titleNo}.pdf`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(url);
+    } catch {
+      setDownloadError('Failed to download certificate. Please try again.');
     }
   }
 
@@ -237,7 +282,9 @@ export default function ApplicationDetail() {
   }
 
   const status = application.status;
-  const isPending = transitionMutation.isPending || regionalApproveMutation.isPending;
+  const isPending =
+    transitionMutation.isPending || regionalApproveMutation.isPending || issueTitleMutation.isPending;
+  const latestTitle = application.parcel?.titles?.[0];
 
   // ── Role-specific action bar ─────────────────────────────────────────────
 
@@ -246,7 +293,7 @@ export default function ApplicationDetail() {
     body: string,
     new_status: string,
     decision: string,
-    action: 'transition' | 'regional-approve' = 'transition',
+    action: 'transition' | 'regional-approve' | 'issue-title' = 'transition',
   ) {
     setConfirmDialog({ open: true, title, body, new_status, decision, action });
   }
@@ -418,12 +465,26 @@ export default function ApplicationDetail() {
                 openConfirm(
                   'Issue Land Certificate (Titre Foncier)?',
                   'This is the final statutory act. You will enter the parcel in the Livre Foncier and issue the Copie du Titre Foncier. The certificate is inattaquable, intangible et définitif — unassailable, indefeasible and final — and enforceable against all third parties. This action cannot be undone through this system.',
-                  'TITLE_ISSUED',
-                  'Parcel entered in the Livre Foncier. Land Certificate (Titre Foncier) issued. Registration complete.',
+                  '',
+                  '',
+                  'issue-title',
                 )
               }
             >
               Issue Land Certificate
+            </Button>
+          </Box>
+        );
+      }
+      if (status === 'TITLE_ISSUED' && latestTitle?.certificate_pdf_path) {
+        return (
+          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+            <Button
+              variant="contained"
+              sx={{ bgcolor: '#2e7d32', '&:hover': { bgcolor: '#1b5e20' } }}
+              onClick={() => void handleDownloadCertificate(latestTitle.id, latestTitle.title_no)}
+            >
+              Download Title Certificate
             </Button>
           </Box>
         );
@@ -622,6 +683,8 @@ export default function ApplicationDetail() {
             onClick={() =>
               confirmDialog.action === 'regional-approve'
                 ? regionalApproveMutation.mutate()
+                : confirmDialog.action === 'issue-title'
+                ? issueTitleMutation.mutate()
                 : transitionMutation.mutate({
                     new_status: confirmDialog.new_status,
                     decision: confirmDialog.decision,

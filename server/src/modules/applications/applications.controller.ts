@@ -230,6 +230,15 @@ export async function getApplication(req: Request, res: Response): Promise<void>
       documents: {
         select: { id: true, doc_type: true, verified_flag: true },
       },
+      parcel: {
+        include: {
+          titles: {
+            orderBy: { issued_at: 'desc' },
+            take: 1,
+            select: { id: true, title_no: true, certificate_pdf_path: true },
+          },
+        },
+      },
     },
   });
 
