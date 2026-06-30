@@ -142,6 +142,62 @@ export async function transitionApplication(req: Request, res: Response): Promis
   res.json({ message: 'Application status updated', application: updated });
 }
 
+// POST /applications/:id/regional-approve — Regional Delegate approves the dossier,
+// opens the statutory 30-day opposition window, and publishes a Digital Bulletin notice.
+export async function regionalApprove(req: Request, res: Response): Promise<void> {
+  const id = req.params['id'] as string;
+
+  const application = await prisma.application.findUnique({
+    where: { id },
+    include: { parcel: { select: { division: true, sub_division: true } } },
+  });
+
+  if (!application) {
+    res.status(404).json({ message: 'Application not found' });
+    return;
+  }
+
+  if (application.status !== 'REGIONAL_REVIEW') {
+    res.status(409).json({
+      message: 'Application must be in REGIONAL_REVIEW status to be approved at regional level',
+    });
+    return;
+  }
+
+  if (!application.reference_no) {
+    res.status(409).json({ message: 'Application has no reference number' });
+    return;
+  }
+
+  const location = application.parcel
+    ? [application.parcel.division, application.parcel.sub_division].filter(Boolean).join(', ')
+    : 'unspecified location';
+
+  const [updated] = await prisma.$transaction([
+    prisma.application.update({
+      where: { id },
+      data: { status: 'OPPOSITION_WINDOW' },
+    }),
+    prisma.approval.create({
+      data: {
+        application_id: id,
+        step: 'Regional Review',
+        actor_id: req.user!.id,
+        role: req.user!.role,
+        decision: 'Dossier approved at regional level; 30-day opposition window opened.',
+      },
+    }),
+    prisma.bulletinEntry.create({
+      data: {
+        reference: application.reference_no,
+        summary: `Avis de clôture de bornage for parcel at ${location}. 30-day opposition window active.`,
+      },
+    }),
+  ]);
+
+  res.json({ message: 'Application approved at regional level', application: updated });
+}
+
 // GET /applications  — officer-scoped by region
 export async function listApplications(req: Request, res: Response): Promise<void> {
   const region = req.user!.region;

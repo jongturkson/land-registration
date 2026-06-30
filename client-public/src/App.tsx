@@ -6,6 +6,7 @@ import WelcomePage from './pages/WelcomePage';
 import ApplyPage from './pages/ApplyPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
+import BulletinBoard from './pages/BulletinBoard';
 
 function Layout({ children }: { children: React.ReactNode }) {
   return (
@@ -34,6 +35,7 @@ export default function App() {
             </ProtectedRoute>
           }
         />
+        <Route path="/bulletin" element={<BulletinBoard />} />
         <Route path="/track" element={<Navigate to="/home" replace />} />
       </Routes>
     </Layout>

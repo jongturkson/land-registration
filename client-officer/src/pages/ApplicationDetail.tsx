@@ -139,7 +139,8 @@ export default function ApplicationDetail() {
     body: string;
     new_status: string;
     decision: string;
-  }>({ open: false, title: '', body: '', new_status: '', decision: '' });
+    action: 'transition' | 'regional-approve';
+  }>({ open: false, title: '', body: '', new_status: '', decision: '', action: 'transition' });
 
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectionNote, setRejectionNote] = useState('');
@@ -165,6 +166,25 @@ export default function ApplicationDetail() {
       setQueryOpen(false);
       setRejectionNote('');
       setQueryNote('');
+      setActionError(null);
+    },
+    onError: (err: unknown) => {
+      const msg = axios.isAxiosError(err)
+        ? ((err.response?.data as { message?: string } | undefined)?.message ??
+          'Action failed. Please try again.')
+        : 'An unexpected error occurred.';
+      setActionError(msg);
+    },
+  });
+
+  // Regional Review step publishes a Public Bulletin notice as a side effect —
+  // routed through its own endpoint rather than the generic transition.
+  const regionalApproveMutation = useMutation({
+    mutationFn: () => api.post(`/applications/${id}/regional-approve`).then((r) => r.data),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['application', id] });
+      void queryClient.invalidateQueries({ queryKey: ['applications'] });
+      setConfirmDialog((d) => ({ ...d, open: false }));
       setActionError(null);
     },
     onError: (err: unknown) => {
@@ -217,12 +237,18 @@ export default function ApplicationDetail() {
   }
 
   const status = application.status;
-  const isPending = transitionMutation.isPending;
+  const isPending = transitionMutation.isPending || regionalApproveMutation.isPending;
 
   // ── Role-specific action bar ─────────────────────────────────────────────
 
-  function openConfirm(title: string, body: string, new_status: string, decision: string) {
-    setConfirmDialog({ open: true, title, body, new_status, decision });
+  function openConfirm(
+    title: string,
+    body: string,
+    new_status: string,
+    decision: string,
+    action: 'transition' | 'regional-approve' = 'transition',
+  ) {
+    setConfirmDialog({ open: true, title, body, new_status, decision, action });
   }
 
   function ActionBar() {
@@ -333,9 +359,10 @@ export default function ApplicationDetail() {
               onClick={() =>
                 openConfirm(
                   'Open the 30-Day Opposition Window?',
-                  'Opening the opposition window publishes the avis de clôture de bornage in the Bulletin des Avis Domaniaux et Fonciers. Any interested party then has 30 days to file a stamped opposition or demand inscription of a real right. You will log any opposition received before issuing the title.',
+                  'Opening the opposition window publishes the avis de clôture de bornage to the Public Digital Bulletin. Any interested party then has 30 days to file a stamped opposition or demand inscription of a real right. You will log any opposition received before issuing the title.',
                   'OPPOSITION_WINDOW',
                   'File examined. Regularity confirmed. Avis de clôture de bornage published. Opposition window opened.',
+                  'regional-approve',
                 )
               }
             >
@@ -593,10 +620,12 @@ export default function ApplicationDetail() {
             disabled={isPending}
             sx={{ bgcolor: accent }}
             onClick={() =>
-              transitionMutation.mutate({
-                new_status: confirmDialog.new_status,
-                decision: confirmDialog.decision,
-              })
+              confirmDialog.action === 'regional-approve'
+                ? regionalApproveMutation.mutate()
+                : transitionMutation.mutate({
+                    new_status: confirmDialog.new_status,
+                    decision: confirmDialog.decision,
+                  })
             }
           >
             {isPending ? 'Processing…' : 'Confirm'}

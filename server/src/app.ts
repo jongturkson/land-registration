@@ -3,6 +3,7 @@ import helmet from 'helmet';
 import cors from 'cors';
 import authRouter from './modules/auth/auth.routes';
 import applicationsRouter from './modules/applications/applications.routes';
+import bulletinRouter from './modules/bulletin/bulletin.routes';
 import { authMiddleware } from './middleware/auth';
 import { authorize } from './middleware/authorize';
 
@@ -18,6 +19,7 @@ app.get('/health', (_req, res) => {
 
 app.use('/auth', authRouter);
 app.use('/applications', applicationsRouter);
+app.use('/bulletins', bulletinRouter);
 
 // Temporary route for RBAC smoke-testing — remove before production
 app.get('/ping-protected', authMiddleware, authorize('title', 'issue'), (_req, res) => {

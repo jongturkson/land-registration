@@ -6,6 +6,7 @@ import {
   createApplication,
   submitApplication,
   transitionApplication,
+  regionalApprove,
   listApplications,
   getApplication,
   trackApplication,
@@ -63,6 +64,12 @@ router.post(
   authMiddleware,
   authorize('application', 'update'),
   transitionApplication,
+);
+router.post(
+  '/:id/regional-approve',
+  authMiddleware,
+  authorize('application', 'review_regional'),
+  regionalApprove,
 );
 router.get('/', authMiddleware, authorize('application', 'read'), listApplications);
 router.get('/:id', authMiddleware, authorize('application', 'read'), getApplication);

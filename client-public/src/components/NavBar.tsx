@@ -35,6 +35,10 @@ export default function NavBar() {
           </Typography>
         </Box>
 
+        <Button component={Link} to="/bulletin" color="inherit" size="small" sx={{ mr: 1 }}>
+          Public Bulletin
+        </Button>
+
         {user ? (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <Typography variant="body2" sx={{ opacity: 0.85, display: { xs: 'none', sm: 'block' } }}>
