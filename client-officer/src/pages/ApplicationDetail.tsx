@@ -26,6 +26,7 @@ import { getUser } from '../lib/auth';
 interface AppDocument {
   id: string;
   doc_type: string;
+  original_name: string | null;
   verified_flag: boolean;
 }
 
@@ -35,6 +36,24 @@ interface TitleSummary {
   certificate_pdf_path: string | null;
 }
 
+interface ParcelFull {
+  plot_no: string | null;
+  block_no: string | null;
+  division: string;
+  sub_division: string | null;
+  situation: string | null;
+  area_sqm: string | null;
+  nature: string | null;
+  limit_north: string | null;
+  limit_south: string | null;
+  limit_east: string | null;
+  limit_west: string | null;
+  developments: string | null;
+  dev_value: number | null;
+  others_occupy: boolean | null;
+  titles: TitleSummary[];
+}
+
 interface ApplicationFull {
   id: string;
   type: string;
@@ -42,15 +61,21 @@ interface ApplicationFull {
   reference_no: string | null;
   created_at: string;
   updated_at: string;
+  applicant_father: string | null;
+  applicant_mother: string | null;
+  applicant_nationality: string | null;
+  applicant_birth_place: string | null;
+  applicant_birth_date: string | null;
+  applicant_profession: string | null;
+  marital_status: string | null;
+  matrimonial_regime: string | null;
   applicant: {
     full_name: string;
     email: string | null;
     region: string;
   };
   documents: AppDocument[];
-  parcel: {
-    titles: TitleSummary[];
-  } | null;
+  parcel: ParcelFull | null;
 }
 
 // ── Lookup tables ──────────────────────────────────────────────────────────
@@ -86,6 +111,7 @@ const DOC_TYPE_LABELS: Record<string, string> = {
   ATTESTATION: 'Attestation of Ownership',
   PROCES_VERBAL: 'Procès-Verbal de Bornage',
   CADASTRAL_PLAN: 'Cadastral Plan',
+  OTHER: 'Other Supporting Document',
 };
 
 type ChipColor = 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning';
@@ -158,6 +184,15 @@ export default function ApplicationDetail() {
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
+  // Inline document preview (officers can view before deciding to download)
+  const [preview, setPreview] = useState<{
+    open: boolean;
+    url: string | null;
+    name: string;
+    mime: string;
+    loading: boolean;
+  }>({ open: false, url: null, name: '', mime: '', loading: false });
+
   const { data: application, isLoading, isError } = useQuery({
     queryKey: ['application', id],
     queryFn: () => api.get<ApplicationFull>(`/applications/${id}`).then((r) => r.data),
@@ -223,6 +258,29 @@ export default function ApplicationDetail() {
       setActionError(msg);
     },
   });
+
+  async function handlePreview(docId: string, label: string) {
+    setDownloadError(null);
+    setPreview({ open: true, url: null, name: label, mime: '', loading: true });
+    try {
+      const res = await api.get(`/applications/documents/${docId}/download`, {
+        responseType: 'blob',
+      });
+      const blob = res.data as Blob;
+      const url = URL.createObjectURL(blob);
+      setPreview({ open: true, url, name: label, mime: blob.type, loading: false });
+    } catch {
+      setPreview({ open: false, url: null, name: '', mime: '', loading: false });
+      setDownloadError('Failed to load document preview. Please try again.');
+    }
+  }
+
+  function closePreview() {
+    setPreview((p) => {
+      if (p.url) URL.revokeObjectURL(p.url);
+      return { open: false, url: null, name: '', mime: '', loading: false };
+    });
+  }
 
   async function handleDownload(docId: string, docType: string) {
     setDownloadError(null);
@@ -556,10 +614,10 @@ export default function ApplicationDetail() {
           </CardContent>
         </Card>
 
-        {/* Applicant details */}
+        {/* Applicant details + civil status (État civil du propriétaire) */}
         <Card elevation={1} sx={{ mb: 2 }}>
           <CardHeader
-            title="Applicant (Requérant)"
+            title="Applicant — Civil Status (État civil du propriétaire)"
             titleTypographyProps={{ variant: 'subtitle1', fontWeight: 700 }}
           />
           <Divider />
@@ -568,9 +626,88 @@ export default function ApplicationDetail() {
               <InfoRow label="Full Name" value={application.applicant.full_name} />
               <InfoRow label="Email" value={application.applicant.email ?? '—'} />
               <InfoRow label="Region" value={application.applicant.region} />
+              <InfoRow label="Nationality" value={application.applicant_nationality ?? '—'} />
+              <InfoRow label="Profession" value={application.applicant_profession ?? '—'} />
+              <InfoRow
+                label="Father's Name (Fils/Fille de)"
+                value={application.applicant_father ?? '—'}
+              />
+              <InfoRow label="Mother's Name (et de)" value={application.applicant_mother ?? '—'} />
+              <InfoRow
+                label="Place of Birth"
+                value={application.applicant_birth_place ?? '—'}
+              />
+              <InfoRow
+                label="Date of Birth"
+                value={
+                  application.applicant_birth_date
+                    ? new Date(application.applicant_birth_date).toLocaleDateString('en-GB', {
+                        day: '2-digit',
+                        month: 'long',
+                        year: 'numeric',
+                      })
+                    : '—'
+                }
+              />
+              <InfoRow label="Marital Status" value={application.marital_status ?? '—'} />
+              <InfoRow label="Matrimonial Regime" value={application.matrimonial_regime ?? '—'} />
             </Box>
           </CardContent>
         </Card>
+
+        {/* Land / parcel description (Désignation de l'immeuble) */}
+        {application.parcel && (
+          <Card elevation={1} sx={{ mb: 2 }}>
+            <CardHeader
+              title="Land Description (Désignation de l'immeuble)"
+              titleTypographyProps={{ variant: 'subtitle1', fontWeight: 700 }}
+            />
+            <Divider />
+            <CardContent>
+              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 3 }}>
+                <InfoRow label="Division" value={application.parcel.division} />
+                <InfoRow label="Sub-Division" value={application.parcel.sub_division ?? '—'} />
+                <InfoRow label="Plot No." value={application.parcel.plot_no ?? '—'} />
+                <InfoRow label="Block No." value={application.parcel.block_no ?? '—'} />
+                <InfoRow label="Locality (Lieu-dit)" value={application.parcel.situation ?? '—'} />
+                <InfoRow
+                  label="Area"
+                  value={application.parcel.area_sqm ? `${application.parcel.area_sqm} m²` : '—'}
+                />
+                <InfoRow
+                  label="Nature & Consistency"
+                  value={application.parcel.nature ?? '—'}
+                />
+                <InfoRow
+                  label="Existing Developments"
+                  value={application.parcel.developments ?? '—'}
+                />
+                <InfoRow
+                  label="Approx. Value of Developments"
+                  value={
+                    application.parcel.dev_value != null
+                      ? `${application.parcel.dev_value.toLocaleString()} FCFA`
+                      : '—'
+                  }
+                />
+                <InfoRow
+                  label="Occupied by Others?"
+                  value={
+                    application.parcel.others_occupy == null
+                      ? '—'
+                      : application.parcel.others_occupy
+                        ? 'Yes'
+                        : 'No'
+                  }
+                />
+                <InfoRow label="Boundary — North" value={application.parcel.limit_north ?? '—'} />
+                <InfoRow label="Boundary — South" value={application.parcel.limit_south ?? '—'} />
+                <InfoRow label="Boundary — East" value={application.parcel.limit_east ?? '—'} />
+                <InfoRow label="Boundary — West" value={application.parcel.limit_west ?? '—'} />
+              </Box>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Document vault */}
         <Card elevation={1} sx={{ mb: 3 }}>
@@ -605,23 +742,42 @@ export default function ApplicationDetail() {
                       borderRadius: 1,
                     }}
                   >
-                    <Box>
+                    <Box sx={{ minWidth: 0, pr: 2 }}>
                       <Typography variant="body2" sx={{ fontWeight: 600 }}>
                         {DOC_TYPE_LABELS[doc.doc_type] ?? doc.doc_type}
                       </Typography>
+                      {doc.original_name && (
+                        <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
+                          {doc.original_name}
+                        </Typography>
+                      )}
                       {doc.verified_flag && (
                         <Typography variant="caption" color="success.main">
                           Verified
                         </Typography>
                       )}
                     </Box>
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      onClick={() => void handleDownload(doc.id, doc.doc_type)}
-                    >
-                      Download
-                    </Button>
+                    <Box sx={{ display: 'flex', gap: 1, flexShrink: 0 }}>
+                      <Button
+                        size="small"
+                        variant="contained"
+                        onClick={() =>
+                          void handlePreview(
+                            doc.id,
+                            doc.original_name ?? DOC_TYPE_LABELS[doc.doc_type] ?? doc.doc_type,
+                          )
+                        }
+                      >
+                        View
+                      </Button>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={() => void handleDownload(doc.id, doc.doc_type)}
+                      >
+                        Download
+                      </Button>
+                    </Box>
                   </Box>
                 ))}
               </Box>
@@ -662,6 +818,49 @@ export default function ApplicationDetail() {
           </CardContent>
         </Card>
       </Box>
+
+      {/* Inline document preview (image / PDF) */}
+      <Dialog open={preview.open} onClose={closePreview} fullWidth maxWidth="md">
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', pr: 2 }}>
+            {preview.name}
+          </Box>
+        </DialogTitle>
+        <DialogContent dividers sx={{ p: 0, bgcolor: '#f5f5f5' }}>
+          {preview.loading || !preview.url ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
+              <CircularProgress />
+            </Box>
+          ) : preview.mime.startsWith('image/') ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+              <Box
+                component="img"
+                src={preview.url}
+                alt={preview.name}
+                sx={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain' }}
+              />
+            </Box>
+          ) : preview.mime === 'application/pdf' ? (
+            <Box component="iframe" title={preview.name} src={preview.url} sx={{ width: '100%', height: '70vh', border: 'none' }} />
+          ) : (
+            <Box sx={{ p: 4, textAlign: 'center' }}>
+              <Typography variant="body2" color="text.secondary">
+                This file type cannot be previewed in the browser. Use Download to open it.
+              </Typography>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          {preview.url && (
+            <Button component="a" href={preview.url} download={preview.name} variant="outlined">
+              Download
+            </Button>
+          )}
+          <Button onClick={closePreview} variant="contained" sx={{ bgcolor: accent }}>
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Generic confirmation dialog (for all non-rejection/query transitions) */}
       <Dialog open={confirmDialog.open} onClose={() => setConfirmDialog((d) => ({ ...d, open: false }))}>

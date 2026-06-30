@@ -1,6 +1,11 @@
 import { useRef, useState } from 'react';
-import { Box, Button, Chip, Paper, Typography } from '@mui/material';
-import { UploadFile as UploadFileIcon, CheckCircle as CheckCircleIcon } from '@mui/icons-material';
+import { Box, Button, Chip, Divider, Paper, Stack, Typography } from '@mui/material';
+import {
+  UploadFile as UploadFileIcon,
+  CheckCircle as CheckCircleIcon,
+  Add as AddIcon,
+} from '@mui/icons-material';
+import { useWatch } from 'react-hook-form';
 import { type WizardStepProps } from '../../schemas/wizard.schema';
 
 const REQUIRED_DOCS = [
@@ -94,10 +99,26 @@ function FileField({
 }
 
 export default function StepDocuments({ form }: WizardStepProps) {
-  const { setValue } = form;
+  const { setValue, control } = form;
+  const otherInputRef = useRef<HTMLInputElement>(null);
+  const others = (useWatch({ control, name: 'documents.others' }) as File[] | undefined) ?? [];
 
   function handleFile(key: DocKey, file: File | null) {
     setValue(`documents.${key}`, file ?? undefined);
+  }
+
+  function handleAddOthers(e: React.ChangeEvent<HTMLInputElement>) {
+    const picked = Array.from(e.target.files ?? []);
+    if (picked.length === 0) return;
+    setValue('documents.others', [...others, ...picked]);
+    if (otherInputRef.current) otherInputRef.current.value = '';
+  }
+
+  function removeOther(index: number) {
+    setValue(
+      'documents.others',
+      others.filter((_, i) => i !== index),
+    );
   }
 
   return (
@@ -123,6 +144,53 @@ export default function StepDocuments({ form }: WizardStepProps) {
           />
         ))}
       </Box>
+
+      <Divider sx={{ my: 3 }} />
+
+      {/* Any other supporting documents the applicant wishes to attach */}
+      <Paper variant="outlined" sx={{ p: 2.5, display: 'flex', flexDirection: 'column', gap: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <UploadFileIcon color="action" fontSize="small" />
+          <Typography sx={{ fontWeight: 600 }}>Other Supporting Documents</Typography>
+        </Box>
+        <Typography variant="caption" color="text.secondary">
+          Optionally attach any additional documents — land agreement, tax receipts, sworn
+          declarations, photographs, etc. You can add as many as you need.
+        </Typography>
+
+        <Box sx={{ mt: 0.5 }}>
+          <input
+            ref={otherInputRef}
+            id="other-docs"
+            type="file"
+            accept=".pdf,.jpg,.jpeg,.png"
+            multiple
+            style={{ display: 'none' }}
+            onChange={handleAddOthers}
+          />
+          <label htmlFor="other-docs" style={{ cursor: 'pointer' }}>
+            <Button component="span" variant="outlined" size="small" startIcon={<AddIcon />}>
+              Add Document(s)
+            </Button>
+          </label>
+        </Box>
+
+        {others.length > 0 && (
+          <Stack spacing={1} sx={{ mt: 1 }}>
+            {others.map((file, i) => (
+              <Chip
+                key={`${file.name}-${i}`}
+                icon={<CheckCircleIcon />}
+                label={file.name}
+                color="success"
+                variant="outlined"
+                onDelete={() => removeOther(i)}
+                sx={{ justifyContent: 'space-between' }}
+              />
+            ))}
+          </Stack>
+        )}
+      </Paper>
     </Box>
   );
 }

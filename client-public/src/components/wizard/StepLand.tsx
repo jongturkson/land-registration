@@ -134,6 +134,122 @@ export default function StepLand({ form }: WizardStepProps) {
           />
         </Box>
 
+        {/* Locality + nature */}
+        <Controller
+          name="land.situation"
+          control={control}
+          render={({ field }) => (
+            <TextField
+              {...field}
+              label="Locality / Place known as (Lieu-dit)"
+              placeholder="e.g. Bonadikombo, Mile 4"
+              fullWidth
+            />
+          )}
+        />
+        <Controller
+          name="land.nature"
+          control={control}
+          render={({ field }) => (
+            <TextField
+              {...field}
+              label="Nature & Consistency of the Property"
+              placeholder="e.g. Urban developed plot of regular shape"
+              fullWidth
+            />
+          )}
+        />
+
+        <Divider textAlign="left">
+          <Typography variant="caption" color="text.secondary">
+            Boundaries (Limites)
+          </Typography>
+        </Divider>
+
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
+          <Controller
+            name="land.limit_north"
+            control={control}
+            render={({ field }) => (
+              <TextField {...field} label="North (au Nord par)" fullWidth />
+            )}
+          />
+          <Controller
+            name="land.limit_south"
+            control={control}
+            render={({ field }) => (
+              <TextField {...field} label="South (au Sud par)" fullWidth />
+            )}
+          />
+          <Controller
+            name="land.limit_east"
+            control={control}
+            render={({ field }) => (
+              <TextField {...field} label="East (à l'Est par)" fullWidth />
+            )}
+          />
+          <Controller
+            name="land.limit_west"
+            control={control}
+            render={({ field }) => (
+              <TextField {...field} label="West (à l'Ouest par)" fullWidth />
+            )}
+          />
+        </Box>
+
+        <Divider textAlign="left">
+          <Typography variant="caption" color="text.secondary">
+            Developments (Ce que supporte le terrain)
+          </Typography>
+        </Divider>
+
+        <Controller
+          name="land.developments"
+          control={control}
+          render={({ field }) => (
+            <TextField
+              {...field}
+              label="Existing Developments on the Land"
+              placeholder="e.g. Dwelling house, cocoa plantation, permanent crops"
+              multiline
+              rows={2}
+              fullWidth
+            />
+          )}
+        />
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
+          <Controller
+            name="land.dev_value"
+            control={control}
+            render={({ field }) => (
+              <TextField
+                {...field}
+                label="Approx. Value of Investments (FCFA)"
+                type="number"
+                slotProps={{ htmlInput: { min: 0 } }}
+                fullWidth
+              />
+            )}
+          />
+          <Controller
+            name="land.others_occupy"
+            control={control}
+            render={({ field }) => (
+              <FormControl>
+                <FormLabel>Is the land occupied by other persons?</FormLabel>
+                <RadioGroup
+                  row
+                  value={field.value ?? ''}
+                  onChange={(e) => field.onChange(e.target.value as 'yes' | 'no')}
+                >
+                  <FormControlLabel value="yes" control={<Radio />} label="Yes" />
+                  <FormControlLabel value="no" control={<Radio />} label="No" />
+                </RadioGroup>
+              </FormControl>
+            )}
+          />
+        </Box>
+
         <Divider />
 
         {/* Layout plan questions */}

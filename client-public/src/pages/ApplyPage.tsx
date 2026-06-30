@@ -90,11 +90,45 @@ export default function ApplyPage() {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      // 1. Create draft application
-      const createRes = await api.post<{ id: string }>('/applications', { type: data.type });
+      // 1. Create draft application — includes applicant civil status + land details,
+      //    from which the backend creates the linked Parcel.
+      const createRes = await api.post<{ id: string }>('/applications', {
+        type: data.type,
+        applicant: {
+          father: data.owner.father_name,
+          mother: data.owner.mother_name,
+          nationality: data.owner.nationality,
+          birth_place: data.owner.birth_place,
+          birth_date: data.owner.birth_date,
+          profession: data.owner.profession,
+          marital_status: data.owner.marital_status,
+          matrimonial_regime: data.owner.matrimonial_regime,
+        },
+        land: {
+          plot_no: data.land.plot_no,
+          block_no: data.land.block_no,
+          subdivision: data.land.subdivision,
+          division: data.land.division,
+          situation: data.land.situation,
+          nature: data.land.nature,
+          area: data.land.area_main || undefined,
+          limit_north: data.land.limit_north,
+          limit_south: data.land.limit_south,
+          limit_east: data.land.limit_east,
+          limit_west: data.land.limit_west,
+          developments: data.land.developments,
+          dev_value: data.land.dev_value || undefined,
+          others_occupy:
+            data.land.others_occupy === 'yes'
+              ? true
+              : data.land.others_occupy === 'no'
+                ? false
+                : undefined,
+        },
+      });
       const applicationId = createRes.data.id;
 
-      // 2. Upload each attached document via multipart/form-data
+      // 2. Upload each single-slot document via multipart/form-data
       const docEntries = (Object.entries(data.documents) as [string, unknown][]).filter(
         ([, file]) => file instanceof File,
       ) as [string, File][];
@@ -103,6 +137,15 @@ export default function ApplyPage() {
         const formData = new FormData();
         formData.append('file', file);
         formData.append('doc_type', DOC_TYPE_MAP[key] ?? key.toUpperCase());
+        await api.post(`/applications/${applicationId}/documents`, formData);
+      }
+
+      // 2b. Upload any additional supporting documents under the OTHER type
+      const otherDocs = (data.documents.others as File[] | undefined) ?? [];
+      for (const file of otherDocs) {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('doc_type', 'OTHER');
         await api.post(`/applications/${applicationId}/documents`, formData);
       }
 

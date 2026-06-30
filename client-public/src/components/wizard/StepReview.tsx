@@ -68,6 +68,14 @@ export default function StepReview({ form, submitError }: Props) {
         <ReviewRow label="Address" value={data.owner?.address} />
         <ReviewRow label="ID Card No." value={data.owner?.id_card_no} />
         <ReviewRow label="ID Delivered On" value={data.owner?.id_delivered_on} />
+        <ReviewRow label="Father's Name" value={data.owner?.father_name} />
+        <ReviewRow label="Mother's Name" value={data.owner?.mother_name} />
+        <ReviewRow label="Place of Birth" value={data.owner?.birth_place} />
+        <ReviewRow label="Date of Birth" value={data.owner?.birth_date} />
+        <ReviewRow label="Nationality" value={data.owner?.nationality} />
+        <ReviewRow label="Profession" value={data.owner?.profession} />
+        <ReviewRow label="Marital Status" value={data.owner?.marital_status} />
+        <ReviewRow label="Matrimonial Regime" value={data.owner?.matrimonial_regime} />
         {data.owner?.acting_on_behalf && (
           <>
             <Divider sx={{ my: 1 }} />
@@ -87,6 +95,8 @@ export default function StepReview({ form, submitError }: Props) {
         <ReviewRow label="Block No." value={data.land?.block_no} />
         <ReviewRow label="Sub-Division" value={data.land?.subdivision} />
         <ReviewRow label="Division" value={data.land?.division} />
+        <ReviewRow label="Locality (Lieu-dit)" value={data.land?.situation} />
+        <ReviewRow label="Nature & Consistency" value={data.land?.nature} />
         <ReviewRow
           label="Area (Main Title)"
           value={data.land?.area_main ? `${data.land.area_main} m²` : undefined}
@@ -111,6 +121,25 @@ export default function StepReview({ form, submitError }: Props) {
             value={data.land?.plan_approved === 'yes' ? 'Yes' : 'No'}
           />
         )}
+        <ReviewRow label="Boundary — North" value={data.land?.limit_north} />
+        <ReviewRow label="Boundary — South" value={data.land?.limit_south} />
+        <ReviewRow label="Boundary — East" value={data.land?.limit_east} />
+        <ReviewRow label="Boundary — West" value={data.land?.limit_west} />
+        <ReviewRow label="Existing Developments" value={data.land?.developments} />
+        <ReviewRow
+          label="Value of Developments"
+          value={data.land?.dev_value ? `${data.land.dev_value} FCFA` : undefined}
+        />
+        <ReviewRow
+          label="Occupied by Others"
+          value={
+            data.land?.others_occupy === 'yes'
+              ? 'Yes'
+              : data.land?.others_occupy === 'no'
+                ? 'No'
+                : undefined
+          }
+        />
         {data.land?.lat !== undefined && data.land?.lng !== undefined && (
           <ReviewRow
             label="GPS Coordinates"
@@ -132,6 +161,10 @@ export default function StepReview({ form, submitError }: Props) {
           label="Attestation"
           value={(data.documents?.attestation as File | undefined)?.name ?? 'Not attached'}
         />
+        {((data.documents?.others as File[] | undefined)?.length ?? 0) > 0 &&
+          (data.documents?.others as File[]).map((f, i) => (
+            <ReviewRow key={`${f.name}-${i}`} label={i === 0 ? 'Other Documents' : ''} value={f.name} />
+          ))}
       </Section>
 
       <Divider />

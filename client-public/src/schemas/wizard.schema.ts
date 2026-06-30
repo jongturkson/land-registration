@@ -54,6 +54,15 @@ export const WizardSchema = z.object({
     address: z.string().min(1, 'Address is required'),
     id_card_no: z.string().min(1, 'ID card number is required'),
     id_delivered_on: z.string().min(1, 'Delivery date is required'),
+    // Civil status (État civil du propriétaire)
+    father_name: z.string().optional(),
+    mother_name: z.string().optional(),
+    nationality: z.string().optional(),
+    birth_place: z.string().optional(),
+    birth_date: z.string().optional(),
+    profession: z.string().optional(),
+    marital_status: z.enum(['MARRIED', 'SINGLE', 'WIDOWED', 'DIVORCED']).optional(),
+    matrimonial_regime: z.enum(['COMMUNITY', 'SEPARATION']).optional(),
     acting_on_behalf: z.boolean(),
     behalf_name: z.string().optional(),
     behalf_id: z.string().optional(),
@@ -66,8 +75,19 @@ export const WizardSchema = z.object({
     block_no: z.string().min(1, 'Block number is required'),
     subdivision: z.string().min(1, 'Subdivision is required'),
     division: z.string().min(1, 'Division is required'),
+    situation: z.string().optional(),
+    nature: z.string().optional(),
     area_main: z.string().optional(),
     area_partition: z.string().optional(),
+    // Boundaries (Limites)
+    limit_north: z.string().optional(),
+    limit_south: z.string().optional(),
+    limit_east: z.string().optional(),
+    limit_west: z.string().optional(),
+    // Developments (ce que supporte le terrain)
+    developments: z.string().optional(),
+    dev_value: z.string().optional(),
+    others_occupy: z.enum(['yes', 'no']).optional(),
     has_layout_plan: z.enum(['yes', 'no']).optional(),
     plan_approved: z.enum(['yes', 'no']).optional(),
     lat: z.number().optional(),
@@ -78,6 +98,7 @@ export const WizardSchema = z.object({
     id_card: z.any().optional(),
     site_plan: z.any().optional(),
     attestation: z.any().optional(),
+    others: z.array(z.any()).optional(),
   }),
 
   consent: z
