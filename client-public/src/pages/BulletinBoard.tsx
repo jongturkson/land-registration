@@ -1,12 +1,22 @@
-import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
+import axios from 'axios';
 import {
   Alert,
   AlertTitle,
   Box,
+  Button,
   CircularProgress,
   Container,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
   Divider,
   Paper,
+  TextField,
   Typography,
 } from '@mui/material';
 import api from '../lib/api';
@@ -20,10 +30,54 @@ interface BulletinEntry {
 }
 
 export default function BulletinBoard() {
+  const { t, i18n } = useTranslation();
+  const dateLocale = i18n.language.startsWith('fr') ? 'fr-FR' : 'en-GB';
+
   const { data, isLoading, isError } = useQuery({
     queryKey: ['bulletins'],
     queryFn: () => api.get<BulletinEntry[]>('/bulletins').then((r) => r.data),
   });
+
+  // ── File Opposition modal state ────────────────────────────────────────
+  const [oppositionFor, setOppositionFor] = useState<BulletinEntry | null>(null);
+  const [name, setName] = useState('');
+  const [contact, setContact] = useState('');
+  const [grounds, setGrounds] = useState('');
+  const [feedback, setFeedback] = useState<{ severity: 'success' | 'error'; text: string } | null>(
+    null,
+  );
+
+  function closeDialog() {
+    setOppositionFor(null);
+    setName('');
+    setContact('');
+    setGrounds('');
+  }
+
+  const oppositionMutation = useMutation({
+    mutationFn: (reference: string) =>
+      api
+        .post(`/applications/${reference}/dispute`, {
+          opponent_name: name.trim(),
+          ...(contact.trim() ? { opponent_contact: contact.trim() } : {}),
+          grounds: grounds.trim(),
+        })
+        .then((r) => r.data),
+    onSuccess: () => {
+      closeDialog();
+      setFeedback({ severity: 'success', text: t('bulletin.oppositionDialog.success') });
+    },
+    onError: (err: unknown) => {
+      const text = axios.isAxiosError(err)
+        ? ((err.response?.data as { message?: string } | undefined)?.message ??
+          t('bulletin.loadError'))
+        : t('bulletin.loadError');
+      setFeedback({ severity: 'error', text });
+    },
+  });
+
+  const canSubmit =
+    name.trim().length >= 2 && grounds.trim().length >= 10 && !oppositionMutation.isPending;
 
   return (
     <Box>
@@ -37,11 +91,8 @@ export default function BulletinBoard() {
           px: 2,
         }}
       >
-        <Typography
-          variant="overline"
-          sx={{ opacity: 0.75, letterSpacing: 2 }}
-        >
-          Republic of Cameroon — Divisional Registry, Buea
+        <Typography variant="overline" sx={{ opacity: 0.75, letterSpacing: 2 }}>
+          {t('bulletin.overline')}
         </Typography>
         <Typography
           variant="h3"
@@ -53,10 +104,10 @@ export default function BulletinBoard() {
             mt: 0.5,
           }}
         >
-          Public Digital Bulletin
+          {t('bulletin.title')}
         </Typography>
         <Typography variant="body1" sx={{ opacity: 0.75, mt: 1 }}>
-          Bulletin des Avis Fonciers
+          {t('bulletin.subtitle')}
         </Typography>
       </Box>
 
@@ -73,14 +124,15 @@ export default function BulletinBoard() {
             '& .MuiAlert-icon': { color: COLORS.ochre },
           }}
         >
-          <AlertTitle sx={{ fontWeight: 700 }}>30-Day Opposition Window</AlertTitle>
-          Each notice below opens a statutory <strong>30-day period</strong>, counted from
-          its publication date, during which any interested party may lodge a formal
-          opposition (<em>mainlevée</em>) or a demand for inscription of right
-          (<em>demande d'inscription de droit</em>) against the parcel concerned. Such
-          claims must be lodged in person at the Divisional Registry office before the
-          window closes — claims received after this deadline will not be considered.
+          <AlertTitle sx={{ fontWeight: 700 }}>{t('bulletin.windowTitle')}</AlertTitle>
+          {t('bulletin.windowBody')}
         </Alert>
+
+        {feedback && (
+          <Alert severity={feedback.severity} sx={{ mb: 3 }} onClose={() => setFeedback(null)}>
+            {feedback.text}
+          </Alert>
+        )}
 
         {/* ── Entries ────────────────────────────────────────────── */}
         {isLoading && (
@@ -89,14 +141,10 @@ export default function BulletinBoard() {
           </Box>
         )}
 
-        {isError && (
-          <Alert severity="error">
-            Unable to load the bulletin right now. Please try again shortly.
-          </Alert>
-        )}
+        {isError && <Alert severity="error">{t('bulletin.loadError')}</Alert>}
 
         {!isLoading && !isError && (data?.length ?? 0) === 0 && (
-          <Alert severity="info">No notices have been published yet.</Alert>
+          <Alert severity="info">{t('bulletin.empty')}</Alert>
         )}
 
         {!isLoading && !isError && (data?.length ?? 0) > 0 && (
@@ -126,23 +174,85 @@ export default function BulletinBoard() {
                       {entry.reference}
                     </Typography>
                     <Typography variant="caption" color="text.secondary">
-                      Published{' '}
-                      {new Date(entry.date).toLocaleDateString('en-GB', {
+                      {t('bulletin.published')}{' '}
+                      {new Date(entry.date).toLocaleDateString(dateLocale, {
                         day: '2-digit',
                         month: 'long',
                         year: 'numeric',
                       })}
                     </Typography>
                   </Box>
-                  <Typography variant="body1" sx={{ lineHeight: 1.7 }}>
+                  <Typography variant="body1" sx={{ lineHeight: 1.7, mb: 2 }}>
                     {entry.summary}
                   </Typography>
+                  <Button
+                    variant="outlined"
+                    color="error"
+                    size="small"
+                    sx={{ fontWeight: 700 }}
+                    onClick={() => setOppositionFor(entry)}
+                  >
+                    {t('bulletin.fileOpposition')}
+                  </Button>
                 </Box>
               </Box>
             ))}
           </Paper>
         )}
       </Container>
+
+      {/* ── File Opposition modal ────────────────────────────────── */}
+      <Dialog open={!!oppositionFor} onClose={closeDialog} fullWidth maxWidth="sm">
+        <DialogTitle>
+          {t('bulletin.oppositionDialog.title', { reference: oppositionFor?.reference })}
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ mb: 2 }}>
+            {t('bulletin.oppositionDialog.body')}
+          </DialogContentText>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <TextField
+              autoFocus
+              required
+              label={t('bulletin.oppositionDialog.name')}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              fullWidth
+            />
+            <TextField
+              label={t('bulletin.oppositionDialog.contact')}
+              value={contact}
+              onChange={(e) => setContact(e.target.value)}
+              fullWidth
+            />
+            <TextField
+              required
+              label={t('bulletin.oppositionDialog.grounds')}
+              helperText={t('bulletin.oppositionDialog.groundsHelp')}
+              multiline
+              rows={4}
+              value={grounds}
+              onChange={(e) => setGrounds(e.target.value)}
+              fullWidth
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeDialog} disabled={oppositionMutation.isPending}>
+            {t('bulletin.oppositionDialog.cancel')}
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            disabled={!canSubmit}
+            onClick={() => oppositionFor && oppositionMutation.mutate(oppositionFor.reference)}
+          >
+            {oppositionMutation.isPending
+              ? t('bulletin.oppositionDialog.submitting')
+              : t('bulletin.oppositionDialog.submit')}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

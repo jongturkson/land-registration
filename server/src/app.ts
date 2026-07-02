@@ -6,6 +6,9 @@ import applicationsRouter from './modules/applications/applications.routes';
 import bulletinRouter from './modules/bulletin/bulletin.routes';
 import titlesRouter from './modules/titles/titles.routes';
 import verificationRouter from './modules/titles/verification.routes';
+import auditRouter from './modules/audit/audit.routes';
+import analyticsRouter from './modules/analytics/analytics.routes';
+import disputesRouter from './modules/applications/disputes.routes';
 import { authMiddleware } from './middleware/auth';
 import { authorize } from './middleware/authorize';
 
@@ -24,6 +27,9 @@ app.use('/applications', applicationsRouter);
 app.use('/bulletins', bulletinRouter);
 app.use(verificationRouter);
 app.use(titlesRouter);
+app.use(auditRouter);
+app.use(analyticsRouter);
+app.use(disputesRouter);
 
 // Temporary route for RBAC smoke-testing — remove before production
 app.get('/ping-protected', authMiddleware, authorize('title', 'issue'), (_req, res) => {

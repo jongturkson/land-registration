@@ -1,33 +1,20 @@
 import { Box, Button, Container, Paper, Typography } from '@mui/material';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../lib/auth';
 import { COLORS } from '../theme';
 
-const FEATURES = [
-  {
-    icon: '📋',
-    title: 'Online Pre-Application',
-    desc: "Fill your Demande de Titre Foncier from home, step by step, in both languages.",
-  },
-  {
-    icon: '📍',
-    title: 'GPS Land Location',
-    desc: "Pin your land's exact coordinates on an interactive map of the Fako Division.",
-  },
-  {
-    icon: '🧾',
-    title: 'Instant Récépissé',
-    desc: 'Receive your reference number immediately upon submission — no queuing required.',
-  },
-  {
-    icon: '🔍',
-    title: 'Track Your Application',
-    desc: 'Check your application status at any time using your Récépissé reference number.',
-  },
+// Feature icons keyed to the i18n entries in welcome.features
+const FEATURE_KEYS = [
+  { icon: '📋', key: 'preApp' },
+  { icon: '📍', key: 'gps' },
+  { icon: '🧾', key: 'receipt' },
+  { icon: '🔍', key: 'trackFeat' },
 ];
 
 export default function WelcomePage() {
   const { user } = useAuth();
+  const { t } = useTranslation();
 
   return (
     <Box>
@@ -71,7 +58,7 @@ export default function WelcomePage() {
             fontSize: { xs: '1.9rem', sm: '2.6rem', md: '3.2rem' },
           }}
         >
-          Land Registration Portal
+          {t('welcome.title')}
         </Typography>
 
         <Typography
@@ -79,14 +66,14 @@ export default function WelcomePage() {
           component="p"
           sx={{ opacity: 0.8, mb: 1, fontWeight: 400 }}
         >
-          Republic of Cameroon
+          {t('welcome.republic')}
         </Typography>
         <Typography
           variant="body1"
           component="p"
           sx={{ opacity: 0.65, mb: 1 }}
         >
-          Divisional Registry, Buea — South West Region
+          {t('welcome.registry')}
         </Typography>
 
         <Typography
@@ -94,8 +81,7 @@ export default function WelcomePage() {
           component="p"
           sx={{ opacity: 0.75, mb: 5, maxWidth: 560, mx: 'auto', mt: 2, lineHeight: 1.7 }}
         >
-          Apply for your Titre Foncier online. Submit your pre-application, upload
-          supporting documents, and receive a Récépissé — all from your device.
+          {t('welcome.pitch')}
         </Typography>
 
         {/* CTAs */}
@@ -109,7 +95,7 @@ export default function WelcomePage() {
               size="large"
               sx={{ px: 5, fontWeight: 700 }}
             >
-              Continue My Application
+              {t('welcome.continueApplication')}
             </Button>
           ) : (
             <>
@@ -121,7 +107,7 @@ export default function WelcomePage() {
                 size="large"
                 sx={{ px: 5, fontWeight: 700 }}
               >
-                Create Account
+                {t('welcome.createAccount')}
               </Button>
               <Button
                 component={Link}
@@ -135,7 +121,7 @@ export default function WelcomePage() {
                   '&:hover': { borderColor: 'white', backgroundColor: 'rgba(255,255,255,0.08)' },
                 }}
               >
-                Sign In
+                {t('welcome.signIn')}
               </Button>
             </>
           )}
@@ -146,7 +132,7 @@ export default function WelcomePage() {
             size="large"
             sx={{ color: 'rgba(255,255,255,0.65)', '&:hover': { color: 'white' } }}
           >
-            Track Application
+            {t('welcome.track')}
           </Button>
         </Box>
       </Box>
@@ -159,7 +145,7 @@ export default function WelcomePage() {
           gutterBottom
           sx={{ fontFamily: "'Lora', serif", fontWeight: 600, mb: 5 }}
         >
-          Everything you need to register your land title
+          {t('welcome.featuresTitle')}
         </Typography>
 
         <Box
@@ -169,14 +155,14 @@ export default function WelcomePage() {
             gap: 3,
           }}
         >
-          {FEATURES.map(({ icon, title, desc }) => (
-            <Paper key={title} variant="outlined" sx={{ p: 3 }}>
+          {FEATURE_KEYS.map(({ icon, key }) => (
+            <Paper key={key} variant="outlined" sx={{ p: 3 }}>
               <Typography sx={{ fontSize: '2.2rem', mb: 1.5 }}>{icon}</Typography>
               <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600 }}>
-                {title}
+                {t(`welcome.features.${key}.title`)}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                {desc}
+                {t(`welcome.features.${key}.desc`)}
               </Typography>
             </Paper>
           ))}
@@ -192,14 +178,14 @@ export default function WelcomePage() {
             gutterBottom
             sx={{ fontFamily: "'Lora', serif", fontWeight: 600, mb: 4 }}
           >
-            How it works
+            {t('welcome.howTitle')}
           </Typography>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {[
-              { step: '1', label: 'Create a free account with your name and email.' },
-              { step: '2', label: 'Fill in the 5-step pre-application wizard.' },
-              { step: '3', label: 'Receive your Récépissé reference number instantly.' },
-              { step: '4', label: 'Present the receipt at the Divisional Registry, Buea.' },
+              { step: '1', label: t('welcome.steps.one') },
+              { step: '2', label: t('welcome.steps.two') },
+              { step: '3', label: t('welcome.steps.three') },
+              { step: '4', label: t('welcome.steps.four') },
             ].map(({ step, label }) => (
               <Box key={step} sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
                 <Box
@@ -236,7 +222,7 @@ export default function WelcomePage() {
                 size="large"
                 sx={{ px: 5, fontWeight: 700 }}
               >
-                Get Started — It's Free
+                {t('welcome.getStarted')}
               </Button>
             )}
           </Box>
@@ -254,8 +240,7 @@ export default function WelcomePage() {
         }}
       >
         <Typography variant="caption" color="text.secondary">
-          © {new Date().getFullYear()} Republic of Cameroon — Ministry of State Property,
-          Surveys and Land Tenure
+          {t('welcome.footer', { year: new Date().getFullYear() })}
         </Typography>
       </Box>
     </Box>

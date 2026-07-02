@@ -265,6 +265,7 @@ export async function getApplication(req: Request, res: Response): Promise<void>
       documents: {
         select: { id: true, doc_type: true, original_name: true, verified_flag: true },
       },
+      disputes: { orderBy: { filed_at: 'desc' } },
       parcel: {
         include: {
           titles: {

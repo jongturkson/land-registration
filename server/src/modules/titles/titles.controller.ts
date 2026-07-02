@@ -1,9 +1,9 @@
-import crypto from 'crypto';
 import path from 'path';
 import fs from 'fs';
 import { Request, Response } from 'express';
 import { prisma } from '../../db/prisma';
 import { generateTitleCertificatePdf } from '../../services/pdf.service';
+import { appendLog } from '../../services/ledger.service';
 
 const ISSUABLE_STATUSES = new Set(['OPPOSITION_WINDOW', 'CLEARED']);
 
@@ -54,6 +54,17 @@ export async function issueTitle(req: Request, res: Response): Promise<void> {
         throw new IssueTitleError(409, 'Application has no associated parcel');
       }
 
+      // Legal blocker: an unresolved opposition freezes the immatriculation.
+      const activeDisputes = await tx.dispute.count({
+        where: { application_id: applicationId, status: 'ACTIVE' },
+      });
+      if (activeDisputes > 0) {
+        throw new IssueTitleError(
+          403,
+          'Forbidden: Cannot issue title. Active oppositions must be lifted (mainlevée) first.',
+        );
+      }
+
       let title_no = generateTitleNo();
       while (await tx.title.findUnique({ where: { title_no } })) {
         title_no = generateTitleNo();
@@ -100,34 +111,23 @@ export async function issueTitle(req: Request, res: Response): Promise<void> {
       });
 
       // Digital Livre Foncier: hash-chained ledger entry for the immatriculation event
-      const lastEntry = await tx.auditLog.findFirst({ orderBy: { seq: 'desc' } });
-      const prev_hash = lastEntry?.self_hash ?? null;
-      const payload = {
-        title_id: title.id,
-        title_no: title.title_no,
-        application_id: application.id,
-        parcel_id: application.parcel.id,
-        owner: owner.full_name,
-        issued_by: req.user!.id,
-        issued_at: title.issued_at,
-      };
-      const self_hash = crypto
-        .createHash('sha256')
-        .update(JSON.stringify({ prev_hash, payload }))
-        .digest('hex');
-
-      await tx.auditLog.create({
-        data: {
-          actor_id: req.user!.id,
-          actor_role: req.user!.role,
-          event: 'IMMATRICULATION',
-          entity: 'TITLE',
-          entity_id: title.id,
-          payload,
-          prev_hash,
-          self_hash,
+      await appendLog(
+        req.user!.id,
+        req.user!.role,
+        'IMMATRICULATION',
+        'TITLE',
+        title.id,
+        {
+          title_id: title.id,
+          title_no: title.title_no,
+          application_id: application.id,
+          parcel_id: application.parcel.id,
+          owner: owner.full_name,
+          issued_by: req.user!.id,
+          issued_at: title.issued_at,
         },
-      });
+        tx,
+      );
 
       return { title, owner, application: updatedApplication, parcel: application.parcel };
     });

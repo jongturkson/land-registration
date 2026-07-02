@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import axios from 'axios';
+import MenuItem from '@mui/material/MenuItem';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -22,6 +24,17 @@ import api from '../lib/api';
 import { getUser } from '../lib/auth';
 
 // ── Types ──────────────────────────────────────────────────────────────────
+
+interface Dispute {
+  id: string;
+  opponent_name: string;
+  opponent_contact: string | null;
+  grounds: string;
+  status: 'ACTIVE' | 'RESOLVED' | 'WITHDRAWN';
+  resolution_notes: string | null;
+  filed_at: string;
+  resolved_at: string | null;
+}
 
 interface AppDocument {
   id: string;
@@ -75,6 +88,7 @@ interface ApplicationFull {
     region: string;
   };
   documents: AppDocument[];
+  disputes: Dispute[];
   parcel: ParcelFull | null;
 }
 
@@ -164,6 +178,7 @@ export default function ApplicationDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
   const user = getUser();
   const accent = roleAccent(user?.role ?? '');
 
@@ -181,6 +196,9 @@ export default function ApplicationDetail() {
   const [rejectionNote, setRejectionNote] = useState('');
   const [queryOpen, setQueryOpen] = useState(false);
   const [queryNote, setQueryNote] = useState('');
+  const [resolveFor, setResolveFor] = useState<Dispute | null>(null);
+  const [resolutionNotes, setResolutionNotes] = useState('');
+  const [resolutionOutcome, setResolutionOutcome] = useState<'RESOLVED' | 'WITHDRAWN'>('RESOLVED');
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -248,6 +266,31 @@ export default function ApplicationDetail() {
       void queryClient.invalidateQueries({ queryKey: ['application', id] });
       void queryClient.invalidateQueries({ queryKey: ['applications'] });
       setConfirmDialog((d) => ({ ...d, open: false }));
+      setActionError(null);
+    },
+    onError: (err: unknown) => {
+      const msg = axios.isAxiosError(err)
+        ? ((err.response?.data as { message?: string } | undefined)?.message ??
+          'Action failed. Please try again.')
+        : 'An unexpected error occurred.';
+      setActionError(msg);
+    },
+  });
+
+  // Mainlevée — lifts an opposition so the title can be issued
+  const resolveDisputeMutation = useMutation({
+    mutationFn: (disputeId: string) =>
+      api
+        .post(`/disputes/${disputeId}/resolve`, {
+          resolution_notes: resolutionNotes.trim(),
+          outcome: resolutionOutcome,
+        })
+        .then((r) => r.data),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['application', id] });
+      setResolveFor(null);
+      setResolutionNotes('');
+      setResolutionOutcome('RESOLVED');
       setActionError(null);
     },
     onError: (err: unknown) => {
@@ -343,6 +386,7 @@ export default function ApplicationDetail() {
   const isPending =
     transitionMutation.isPending || regionalApproveMutation.isPending || issueTitleMutation.isPending;
   const latestTitle = application.parcel?.titles?.[0];
+  const activeDisputes = application.disputes.filter((d) => d.status === 'ACTIVE');
 
   // ── Role-specific action bar ─────────────────────────────────────────────
 
@@ -513,11 +557,13 @@ export default function ApplicationDetail() {
         );
       }
       if (status === 'CLEARED') {
+        // Legal blocker: active oppositions freeze title issuance (mainlevée required)
+        const blocked = activeDisputes.length > 0;
         return (
-          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
             <Button
               variant="contained"
-              disabled={isPending}
+              disabled={isPending || blocked}
               sx={{ bgcolor: '#2e7d32', '&:hover': { bgcolor: '#1b5e20' } }}
               onClick={() =>
                 openConfirm(
@@ -531,6 +577,11 @@ export default function ApplicationDetail() {
             >
               Issue Land Certificate
             </Button>
+            {blocked && (
+              <Typography variant="body2" color="error" sx={{ fontWeight: 600 }}>
+                {t('disputes.issueBlocked')}
+              </Typography>
+            )}
           </Box>
         );
       }
@@ -785,6 +836,83 @@ export default function ApplicationDetail() {
           </CardContent>
         </Card>
 
+        {/* Oppositions / disputes filed during the 30-day window */}
+        <Card elevation={1} sx={{ mb: 3 }}>
+          <CardHeader
+            title={t('disputes.cardTitle')}
+            subheader={t('disputes.cardSubtitle')}
+            titleTypographyProps={{ variant: 'subtitle1', fontWeight: 700 }}
+          />
+          <Divider />
+          <CardContent>
+            {activeDisputes.length > 0 && (
+              <Alert severity="warning" sx={{ mb: 2, fontWeight: 600 }}>
+                {t('disputes.activeWarning', { count: activeDisputes.length })}
+              </Alert>
+            )}
+            {application.disputes.length === 0 ? (
+              <Typography variant="body2" color="text.secondary">
+                {t('disputes.none')}
+              </Typography>
+            ) : (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                {application.disputes.map((dispute) => (
+                  <Box
+                    key={dispute.id}
+                    sx={{
+                      p: 2,
+                      border: '1px solid',
+                      borderColor: dispute.status === 'ACTIVE' ? 'error.light' : 'divider',
+                      borderRadius: 1,
+                      bgcolor: dispute.status === 'ACTIVE' ? '#fff5f5' : 'transparent',
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                        {t('disputes.filedBy')}: {dispute.opponent_name}
+                        {dispute.opponent_contact ? ` · ${dispute.opponent_contact}` : ''}
+                      </Typography>
+                      <Chip
+                        size="small"
+                        label={dispute.status}
+                        color={dispute.status === 'ACTIVE' ? 'error' : 'success'}
+                        sx={{ fontWeight: 700 }}
+                      />
+                    </Box>
+                    <Typography variant="body2" sx={{ mb: 1 }}>
+                      <strong>{t('disputes.grounds')}:</strong> {dispute.grounds}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                      {t('disputes.filedAt')}{' '}
+                      {new Date(dispute.filed_at).toLocaleDateString('en-GB', {
+                        day: '2-digit', month: 'long', year: 'numeric',
+                      })}
+                      {dispute.resolved_at &&
+                        ` · ${t('disputes.resolvedAt')} ${new Date(dispute.resolved_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}`}
+                    </Typography>
+                    {dispute.resolution_notes && (
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                        {t('disputes.resolutionNotes')}: {dispute.resolution_notes}
+                      </Typography>
+                    )}
+                    {dispute.status === 'ACTIVE' && user?.role === 'registrar' && (
+                      <Button
+                        size="small"
+                        variant="contained"
+                        color="error"
+                        sx={{ mt: 1.5 }}
+                        onClick={() => setResolveFor(dispute)}
+                      >
+                        {t('disputes.resolveBtn')}
+                      </Button>
+                    )}
+                  </Box>
+                ))}
+              </Box>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Role-specific action bar */}
         <Card
           elevation={0}
@@ -937,6 +1065,57 @@ export default function ApplicationDetail() {
             }
           >
             {isPending ? 'Rejecting…' : 'Confirm Rejection'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Resolve dispute (mainlevée) dialog */}
+      <Dialog
+        open={!!resolveFor}
+        onClose={() => { setResolveFor(null); setResolutionNotes(''); }}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>{t('disputes.resolveDialog.title')}</DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ mb: 2 }}>{t('disputes.resolveDialog.body')}</DialogContentText>
+          <TextField
+            select
+            fullWidth
+            label={t('disputes.resolveDialog.outcome')}
+            value={resolutionOutcome}
+            onChange={(e) => setResolutionOutcome(e.target.value as 'RESOLVED' | 'WITHDRAWN')}
+            sx={{ mb: 2 }}
+          >
+            <MenuItem value="RESOLVED">{t('disputes.resolveDialog.resolved')}</MenuItem>
+            <MenuItem value="WITHDRAWN">{t('disputes.resolveDialog.withdrawn')}</MenuItem>
+          </TextField>
+          <TextField
+            autoFocus
+            label={t('disputes.resolveDialog.notes')}
+            multiline
+            rows={3}
+            fullWidth
+            value={resolutionNotes}
+            onChange={(e) => setResolutionNotes(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => { setResolveFor(null); setResolutionNotes(''); }}
+            disabled={resolveDisputeMutation.isPending}
+          >
+            {t('common.cancel')}
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            disabled={resolveDisputeMutation.isPending || resolutionNotes.trim().length < 5}
+            onClick={() => resolveFor && resolveDisputeMutation.mutate(resolveFor.id)}
+          >
+            {resolveDisputeMutation.isPending
+              ? t('common.processing')
+              : t('disputes.resolveDialog.submit')}
           </Button>
         </DialogActions>
       </Dialog>

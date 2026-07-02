@@ -13,8 +13,36 @@ p, divisional_delegate, fako, document, read
 p, surveyor, fako, survey, create
 p, surveyor, fako, application, read
 p, surveyor, fako, document, read
+p, registrar, fako, title, transfer
+p, registrar, fako, title, mortgage
+p, registrar, fako, title, subdivide
+p, registrar, fako, dispute, resolve
+p, registrar, fako, audit, read
+p, registrar, fako, audit, verify
+p, registrar, fako, analytics, read
+p, surveyor, fako, title, read
+p, regional_delegate, fako, application, read
+p, regional_delegate, fako, application, update
+p, regional_delegate, fako, application, review_regional
+p, regional_delegate, fako, document, read
+p, governor, fako, application, read
+p, governor, fako, document, read
+p, governor, fako, analytics, read
+p, chief, fako, application, read
+p, chief, fako, document, read
+p, admin, fako, application, read
+p, admin, fako, application, update
+p, admin, fako, document, read
+p, admin, fako, title, read
+p, admin, fako, audit, read
+p, admin, fako, audit, verify
+p, admin, fako, analytics, read
 
 g, registrar, registrar, fako
 g, sub_divisional_officer, sub_divisional_officer, fako
 g, divisional_delegate, divisional_delegate, fako
 g, surveyor, surveyor, fako
+g, regional_delegate, regional_delegate, fako
+g, governor, governor, fako
+g, chief, chief, fako
+g, admin, admin, fako

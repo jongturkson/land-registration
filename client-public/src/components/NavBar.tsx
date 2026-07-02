@@ -1,10 +1,13 @@
 import { AppBar, Box, Button, Toolbar, Typography } from '@mui/material';
 import { Link, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../lib/auth';
+import LanguageSwitcher from './LanguageSwitcher';
 
 export default function NavBar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   function handleLogout() {
     logout();
@@ -31,16 +34,21 @@ export default function NavBar() {
             <path d="M12 3L1 9l4 2.18v6L12 21l7-3.82v-6L23 9 12 3zm-1 12.99L7 13.5v-3.42L11 12v3.99zm2 0V12l4-1.92v3.42L13 15.99z" />
           </svg>
           <Typography variant="h6" component="span" sx={{ fontFamily: "'Lora', serif", fontWeight: 600 }}>
-            Land Registration Portal
+            {t('nav.brand')}
           </Typography>
         </Box>
 
+        <Button component={Link} to="/how-it-works" color="inherit" size="small" sx={{ mr: 1 }}>
+          {t('nav.howItWorks')}
+        </Button>
         <Button component={Link} to="/verify" color="inherit" size="small" sx={{ mr: 1 }}>
-          Verify Title
+          {t('nav.verify')}
         </Button>
         <Button component={Link} to="/bulletin" color="inherit" size="small" sx={{ mr: 1 }}>
-          Public Bulletin
+          {t('nav.bulletin')}
         </Button>
+
+        <LanguageSwitcher />
 
         {user ? (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
@@ -54,13 +62,13 @@ export default function NavBar() {
               onClick={handleLogout}
               sx={{ borderColor: 'rgba(255,255,255,0.5)', '&:hover': { borderColor: 'white' } }}
             >
-              Sign Out
+              {t('nav.signOut')}
             </Button>
           </Box>
         ) : (
           <Box sx={{ display: 'flex', gap: 1 }}>
             <Button component={Link} to="/login" color="inherit" size="small">
-              Sign In
+              {t('nav.signIn')}
             </Button>
             <Button
               component={Link}
@@ -70,7 +78,7 @@ export default function NavBar() {
               size="small"
               sx={{ borderColor: 'rgba(255,255,255,0.5)', '&:hover': { borderColor: 'white' } }}
             >
-              Register
+              {t('nav.register')}
             </Button>
           </Box>
         )}

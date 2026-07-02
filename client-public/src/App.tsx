@@ -3,6 +3,7 @@ import { Box } from '@mui/material';
 import NavBar from './components/NavBar';
 import ProtectedRoute from './components/ProtectedRoute';
 import WelcomePage from './pages/WelcomePage';
+import HowItWorks from './pages/HowItWorks';
 import ApplyPage from './pages/ApplyPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
@@ -26,6 +27,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Navigate to="/home" replace />} />
         <Route path="/home" element={<WelcomePage />} />
+        <Route path="/how-it-works" element={<HowItWorks />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route

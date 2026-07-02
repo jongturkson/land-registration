@@ -19,6 +19,12 @@ enum AppType {
   TRANSFORMATION
 }
 
+enum DisputeStatus {
+  ACTIVE
+  RESOLVED
+  WITHDRAWN
+}
+
 enum AppStatus {
   DRAFT
   SUBMITTED
@@ -84,6 +90,25 @@ model Application {
   documents      ApplicationDocument[]
   survey_reports SurveyReport[]
   approvals      Approval[]
+  disputes       Dispute[]
+}
+
+// Opposition (opposition à immatriculation) filed against an application during
+// the statutory 30-day window. An ACTIVE dispute blocks title issuance until
+// it is lifted (mainlevée) by the registrar.
+model Dispute {
+  id               String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  application_id   String        @db.Uuid
+  opponent_name    String
+  opponent_contact String?
+  grounds          String
+  status           DisputeStatus @default(ACTIVE)
+  resolution_notes String?
+  resolved_by      String?       @db.Uuid
+  filed_at         DateTime      @default(now())
+  resolved_at      DateTime?
+
+  application Application @relation(fields: [application_id], references: [id])
 }
 
 model ApplicationDocument {

@@ -13,6 +13,7 @@ import {
 } from './applications.controller';
 import { upload, uploadDocument, downloadDocument } from './documents.controller';
 import { submitSurvey } from './survey.controller';
+import { fileDispute } from './disputes.controller';
 
 const router = Router();
 
@@ -43,9 +44,10 @@ router.get(
   downloadDocument,
 );
 
-// ── Public route ───────────────────────────────────────────────────────────
+// ── Public routes ──────────────────────────────────────────────────────────
 
 router.get('/:id/track', trackApplication);
+router.post('/:reference_no/dispute', fileDispute);
 
 // ── Citizen routes ─────────────────────────────────────────────────────────
 

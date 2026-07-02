@@ -21,5 +21,8 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  // Unused shadcn/ui stubs — they reference packages that are not installed
+  // (radix, cva, tailwind-merge) and nothing in the app imports them.
+  "exclude": ["src/components/ui", "src/lib/utils.ts"]
 }

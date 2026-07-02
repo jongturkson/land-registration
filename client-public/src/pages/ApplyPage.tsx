@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import type { Path } from 'react-hook-form';
@@ -14,7 +15,12 @@ import {
   Typography,
 } from '@mui/material';
 import axios from 'axios';
-import { WizardSchema, type WizardFormData } from '../schemas/wizard.schema';
+import {
+  APP_TYPES,
+  WizardSchema,
+  type AppTypeValue,
+  type WizardFormData,
+} from '../schemas/wizard.schema';
 import StepType from '../components/wizard/StepType';
 import StepOwner from '../components/wizard/StepOwner';
 import StepLand from '../components/wizard/StepLand';
@@ -33,6 +39,14 @@ const STEP_FIELDS: Record<number, Path<WizardFormData>[]> = {
 };
 
 export default function ApplyPage() {
+  // Pre-select the registration type when arriving from "How Registration Works"
+  // via /apply?type=<wizardType>; ignore anything that isn't a valid enum value.
+  const [searchParams] = useSearchParams();
+  const typeParam = searchParams.get('type');
+  const preselectedType = APP_TYPES.some((t) => t.value === typeParam)
+    ? (typeParam as AppTypeValue)
+    : undefined;
+
   const [activeStep, setActiveStep] = useState(0);
   const [referenceNo, setReferenceNo] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -42,6 +56,7 @@ export default function ApplyPage() {
   const form = useForm<WizardFormData>({
     resolver: zodResolver(WizardSchema),
     defaultValues: {
+      type: preselectedType,
       owner: {
         full_name: '',
         address: '',
