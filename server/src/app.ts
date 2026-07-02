@@ -5,6 +5,7 @@ import authRouter from './modules/auth/auth.routes';
 import applicationsRouter from './modules/applications/applications.routes';
 import bulletinRouter from './modules/bulletin/bulletin.routes';
 import titlesRouter from './modules/titles/titles.routes';
+import verificationRouter from './modules/titles/verification.routes';
 import { authMiddleware } from './middleware/auth';
 import { authorize } from './middleware/authorize';
 
@@ -21,6 +22,7 @@ app.get('/health', (_req, res) => {
 app.use('/auth', authRouter);
 app.use('/applications', applicationsRouter);
 app.use('/bulletins', bulletinRouter);
+app.use(verificationRouter);
 app.use(titlesRouter);
 
 // Temporary route for RBAC smoke-testing — remove before production

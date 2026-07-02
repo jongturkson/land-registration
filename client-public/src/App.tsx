@@ -7,6 +7,7 @@ import ApplyPage from './pages/ApplyPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import BulletinBoard from './pages/BulletinBoard';
+import VerificationPortal from './pages/VerificationPortal';
 
 function Layout({ children }: { children: React.ReactNode }) {
   return (
@@ -36,6 +37,7 @@ export default function App() {
           }
         />
         <Route path="/bulletin" element={<BulletinBoard />} />
+        <Route path="/verify" element={<VerificationPortal />} />
         <Route path="/track" element={<Navigate to="/home" replace />} />
       </Routes>
     </Layout>

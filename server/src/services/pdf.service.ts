@@ -38,7 +38,10 @@ export interface TitleCertificateData {
 // Generates the "Copie du Titre Foncier" certificate, embeds a QR code that
 // resolves to the public verification page, and saves it to CERTIFICATES_DIR.
 export async function generateTitleCertificatePdf(data: TitleCertificateData): Promise<string> {
-  const verifyUrl = `${env.publicAppUrl}/verify?title_no=${encodeURIComponent(data.title_no)}`;
+  const verifyParams = new URLSearchParams({ title_no: data.title_no });
+  if (data.volume) verifyParams.set('volume', data.volume);
+  if (data.folio) verifyParams.set('folio', data.folio);
+  const verifyUrl = `${env.publicAppUrl}/verify?${verifyParams.toString()}`;
   const qrDataUrl = await QRCode.toDataURL(verifyUrl, { margin: 1, width: 120 });
   const qrImage = Buffer.from(qrDataUrl.split(',')[1] ?? '', 'base64');
 

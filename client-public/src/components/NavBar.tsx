@@ -35,6 +35,9 @@ export default function NavBar() {
           </Typography>
         </Box>
 
+        <Button component={Link} to="/verify" color="inherit" size="small" sx={{ mr: 1 }}>
+          Verify Title
+        </Button>
         <Button component={Link} to="/bulletin" color="inherit" size="small" sx={{ mr: 1 }}>
           Public Bulletin
         </Button>
