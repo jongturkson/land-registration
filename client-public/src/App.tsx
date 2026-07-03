@@ -4,6 +4,7 @@ import NavBar from './components/NavBar';
 import ProtectedRoute from './components/ProtectedRoute';
 import WelcomePage from './pages/WelcomePage';
 import HowItWorks from './pages/HowItWorks';
+import TrackApplication from './pages/TrackApplication';
 import ApplyPage from './pages/ApplyPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
@@ -40,7 +41,7 @@ export default function App() {
         />
         <Route path="/bulletin" element={<BulletinBoard />} />
         <Route path="/verify" element={<VerificationPortal />} />
-        <Route path="/track" element={<Navigate to="/home" replace />} />
+        <Route path="/track" element={<TrackApplication />} />
       </Routes>
     </Layout>
   );

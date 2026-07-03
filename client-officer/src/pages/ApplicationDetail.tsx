@@ -18,10 +18,14 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
 import Divider from '@mui/material/Divider';
+import Step from '@mui/material/Step';
+import StepLabel from '@mui/material/StepLabel';
+import Stepper from '@mui/material/Stepper';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import api from '../lib/api';
 import { getUser } from '../lib/auth';
+import { trackFor, stepsFor, nextStepText } from '../lib/workflow';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -123,6 +127,8 @@ const DOC_TYPE_LABELS: Record<string, string> = {
   ID_CARD: 'National ID Card',
   SITE_PLAN: 'Preliminary Site Plan',
   ATTESTATION: 'Attestation of Ownership',
+  JUDGMENT: 'Court Judgment / Inheritance Certificate',
+  NOTARIAL_ACT: 'Notarial Act (Acte Notarié)',
   PROCES_VERBAL: 'Procès-Verbal de Bornage',
   CADASTRAL_PLAN: 'Cadastral Plan',
   OTHER: 'Other Supporting Document',
@@ -388,6 +394,11 @@ export default function ApplicationDetail() {
   const latestTitle = application.parcel?.titles?.[0];
   const activeDisputes = application.disputes.filter((d) => d.status === 'ACTIVE');
 
+  // Statutory track for this application type (mirrors the server state machine)
+  const track = trackFor(application.type);
+  const workflowSteps = stepsFor(application.type);
+  const currentStepIndex = workflowSteps.findIndex((s) => s.status === status);
+
   // ── Role-specific action bar ─────────────────────────────────────────────
 
   function openConfirm(
@@ -435,6 +446,9 @@ export default function ApplicationDetail() {
         );
       }
       if (status === 'RECEIPTED') {
+        // Notarial fast-track files skip the public notice entirely and land
+        // directly on the Conservateur Foncier's desk.
+        if (track === 'FAST') return null;
         return (
           <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
             <Button
@@ -458,6 +472,35 @@ export default function ApplicationDetail() {
               onClick={() => setQueryOpen(true)}
             >
               Raise a Query
+            </Button>
+          </Box>
+        );
+      }
+      if (status === 'QUERIED') {
+        return (
+          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+            <Button
+              variant="contained"
+              disabled={isPending}
+              sx={{ bgcolor: accent, '&:hover': { bgcolor: '#4a28a0' } }}
+              onClick={() =>
+                openConfirm(
+                  'Re-open File?',
+                  'The queried issue has been corrected. The file returns to the Receipted stage and resumes its normal course.',
+                  'RECEIPTED',
+                  'Query resolved. File re-opened at receipt stage.',
+                )
+              }
+            >
+              Re-open File (Query Resolved)
+            </Button>
+            <Button
+              variant="outlined"
+              color="error"
+              disabled={isPending}
+              onClick={() => setRejectOpen(true)}
+            >
+              Reject Application
             </Button>
           </Box>
         );
@@ -498,7 +541,68 @@ export default function ApplicationDetail() {
 
     // ── Registrar (Conservateur Foncier): opposition management & title ──
     if (role === 'registrar') {
+      // Notarial fast-track (Mutation Totale / Hypothèque): the deed comes
+      // straight from the notary — verify it and clear for registration.
+      if (status === 'RECEIPTED' && track === 'FAST') {
+        return (
+          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+            <Button
+              variant="contained"
+              disabled={isPending}
+              sx={{ bgcolor: accent, '&:hover': { bgcolor: '#92400e' } }}
+              onClick={() =>
+                openConfirm(
+                  'Verify Notarial Act — Clear for Registration?',
+                  'You confirm the notarial act is authentic, the transfer duties are paid, and the title is free of blocking charges. This type bypasses the public notice and opposition phases; the file is cleared for entry in the Livre Foncier.',
+                  'CLEARED',
+                  'Notarial act verified. Duties confirmed paid. File cleared for registration (fast-track — no public notice required).',
+                )
+              }
+            >
+              Verify Notarial Act — Clear for Registration
+            </Button>
+            <Button
+              variant="outlined"
+              color="error"
+              disabled={isPending}
+              onClick={() => setRejectOpen(true)}
+            >
+              Reject File
+            </Button>
+          </Box>
+        );
+      }
       if (status === 'REGIONAL_REVIEW') {
+        // Subdivisions/partitions of already-titled land skip the window
+        if (track === 'NO_OPPOSITION') {
+          return (
+            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+              <Button
+                variant="contained"
+                disabled={isPending}
+                sx={{ bgcolor: accent, '&:hover': { bgcolor: '#92400e' } }}
+                onClick={() =>
+                  openConfirm(
+                    'Clear for Title — No Opposition Window Required?',
+                    'The parent parcel is already titled, so this file does not pass through the 30-day public opposition window. Clearing it authorises entry of the new parcel(s) in the Livre Foncier.',
+                    'CLEARED',
+                    'Dossier regular. Parent title verified. Cleared for registration — opposition window not applicable to this type.',
+                  )
+                }
+              >
+                Clear for Title (No Opposition Required)
+              </Button>
+              <Button
+                variant="outlined"
+                color="error"
+                disabled={isPending}
+                onClick={() => setRejectOpen(true)}
+              >
+                Reject File
+              </Button>
+            </Box>
+          );
+        }
         return (
           <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
             <Button
@@ -637,6 +741,56 @@ export default function ApplicationDetail() {
             {actionError}
           </Alert>
         )}
+
+        {/* Statutory progress — the two grand phases of the physical journey */}
+        <Card elevation={1} sx={{ mb: 2 }}>
+          <CardContent>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', mb: 1.5 }}>
+              <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary' }}>
+                {track === 'FAST'
+                  ? 'NOTARIAL FAST-TRACK — PHASE II (REGISTRATION) ONLY'
+                  : 'PHASE I — ESTABLISHING THE GROUND TRUTH · PHASE II — REGISTRATION'}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                {track === 'FULL'
+                  ? 'First registration — 30-day opposition window applies'
+                  : track === 'NO_OPPOSITION'
+                    ? 'Titled parent parcel — no opposition window'
+                    : 'Notarial act — bypasses public notice'}
+              </Typography>
+            </Box>
+            {status === 'QUERIED' || status === 'REJECTED' ? (
+              <Alert severity={status === 'REJECTED' ? 'error' : 'warning'} icon={false}>
+                {nextStepText(application.type, status)}
+              </Alert>
+            ) : (
+              <>
+                <Stepper
+                  activeStep={currentStepIndex === -1 ? 0 : currentStepIndex}
+                  alternativeLabel
+                  sx={{ mb: 1.5 }}
+                >
+                  {workflowSteps.map((s, i) => (
+                    <Step key={s.status} completed={currentStepIndex > i}>
+                      <StepLabel
+                        optional={
+                          <Typography variant="caption" color="text.secondary">
+                            Phase {s.phase === 1 ? 'I' : 'II'}
+                          </Typography>
+                        }
+                      >
+                        {s.label}
+                      </StepLabel>
+                    </Step>
+                  ))}
+                </Stepper>
+                <Alert severity="info" icon={false} sx={{ py: 0.5 }}>
+                  {nextStepText(application.type, status)}
+                </Alert>
+              </>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Application details */}
         <Card elevation={1} sx={{ mb: 2 }}>
@@ -926,15 +1080,7 @@ export default function ApplicationDetail() {
           />
           <Divider />
           <CardContent>
-            {(status === 'TITLE_ISSUED' ||
-              status === 'DRAFT' ||
-              status === 'PUBLISHED' ||
-              status === 'BOARD_SCHEDULED') &&
-            !['sub_divisional_officer', 'divisional_delegate', 'registrar'].includes(
-              user?.role ?? '',
-            ) ? null : <ActionBar />}
-            {/* Show a neutral message when no action is available at this stage */}
-            {ActionBar() === null && (
+            {ActionBar() ?? (
               <Alert severity="info" icon={false}>
                 {status === 'TITLE_ISSUED'
                   ? 'A Land Certificate has been issued for this application. The registration is complete.'

@@ -48,19 +48,16 @@ model User {
   region          String
   hashed_password String
   full_name       String
-  id_card_no      String?
+  id_card_no      String? @unique
   phone           String?
-  email           String?
+  email           String? @unique
+  department      String?
+  status          String  @default("ACTIVE") // ACTIVE | SUSPENDED
 
   applications   Application[]
   issued_titles  Title[]        @relation("Issuer")
   survey_reports SurveyReport[]
   approvals      Approval[]
-}
-
-model Role {
-  id   String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name String @unique
 }
 
 model Application {
@@ -69,7 +66,7 @@ model Application {
   status       AppStatus @default(DRAFT)
   applicant_id String    @db.Uuid
   parcel_id    String?   @db.Uuid
-  reference_no String?
+  reference_no String?   @unique
   fee_amount   Int?
   created_at   DateTime  @default(now())
   updated_at   DateTime  @updatedAt
@@ -91,6 +88,10 @@ model Application {
   survey_reports SurveyReport[]
   approvals      Approval[]
   disputes       Dispute[]
+
+  @@index([applicant_id])
+  @@index([parcel_id])
+  @@index([status])
 }
 
 // Opposition (opposition à immatriculation) filed against an application during
@@ -109,6 +110,8 @@ model Dispute {
   resolved_at      DateTime?
 
   application Application @relation(fields: [application_id], references: [id])
+
+  @@index([application_id, status])
 }
 
 model ApplicationDocument {
@@ -120,6 +123,8 @@ model ApplicationDocument {
   verified_flag  Boolean @default(false)
 
   application Application @relation(fields: [application_id], references: [id], onDelete: Cascade)
+
+  @@index([application_id])
 }
 
 model Parcel {
@@ -129,7 +134,6 @@ model Parcel {
   division     String
   sub_division String?
   situation    String?
-  limits       String?
   area_sqm     Decimal?
   status       String   @default("PENDING")
   created_at   DateTime @default(now())
@@ -167,6 +171,8 @@ model Title {
   issuer       User          @relation("Issuer", fields: [issued_by], references: [id])
   owners       TitleOwner[]
   encumbrances Encumbrance[]
+
+  @@index([parcel_id])
 }
 
 model TitleOwner {
@@ -179,6 +185,8 @@ model TitleOwner {
   is_current  Boolean   @default(true)
 
   title Title @relation(fields: [title_id], references: [id])
+
+  @@index([title_id, is_current])
 }
 
 model Encumbrance {
@@ -191,6 +199,8 @@ model Encumbrance {
   cleared_at  DateTime?
 
   title Title @relation(fields: [title_id], references: [id])
+
+  @@index([title_id, status])
 }
 
 model SurveyReport {
@@ -204,6 +214,8 @@ model SurveyReport {
 
   application Application @relation(fields: [application_id], references: [id])
   surveyor    User        @relation(fields: [surveyor_id], references: [id])
+
+  @@index([application_id])
 }
 
 model Approval {
@@ -217,24 +229,30 @@ model Approval {
 
   application Application @relation(fields: [application_id], references: [id])
   actor       User        @relation(fields: [actor_id], references: [id])
+
+  @@index([application_id])
 }
 
 model VerificationRequest {
-  id                String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   requester_info    Json
   title_no          String
   fee_status        String
   result            String?
   certificate_token String?
+  created_at        DateTime @default(now())
+
+  @@index([title_no])
 }
 
 model Payment {
-  id           String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   purpose      String
   amount       Int
   provider     String
   provider_ref String?
   status       String
+  created_at   DateTime @default(now())
 }
 
 model AuditLog {
@@ -248,6 +266,19 @@ model AuditLog {
   occurred_at DateTime @default(now())
   prev_hash   String?
   self_hash   String
+
+  @@index([entity, entity_id])
+}
+
+// Singleton row (id = 1) of dynamic global configuration, managed by the
+// Admin via PUT /admin/settings. Reads go through the cached settings service.
+model SystemSettings {
+  id                      Int      @id @default(1)
+  current_taxation_rate   Float    @default(15.0)
+  opposition_window_days  Int      @default(30)
+  system_maintenance_mode Boolean  @default(false)
+  updated_at              DateTime @default(now()) @updatedAt
+  updated_by              String?  @db.Uuid
 }
 
 model BulletinEntry {
@@ -255,4 +286,6 @@ model BulletinEntry {
   date      DateTime @default(now())
   reference String
   summary   String
+
+  @@index([reference])
 }

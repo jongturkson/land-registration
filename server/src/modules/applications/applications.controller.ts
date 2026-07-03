@@ -1,15 +1,67 @@
 import { Request, Response } from 'express';
 import { prisma } from '../../db/prisma';
+import type { Prisma } from '../../generated/prisma/client';
 import {
   CreateApplicationSchema,
   SubmitApplicationSchema,
   TransitionApplicationSchema,
 } from '../../shared/schemas/application.schema';
+import {
+  checkTransition,
+  requiredDocTypes,
+  requiresOppositionWindow,
+} from './workflow';
+import { getSystemSettings } from '../../services/settings.service';
 
-function generateReferenceNo(): string {
+// reference_no carries a UNIQUE constraint; retry on the (rare) collision
+async function generateReferenceNo(): Promise<string> {
   const year = new Date().getFullYear();
-  const seq = String(Math.floor(1000 + Math.random() * 9000));
-  return `APP-${year}-${seq}`;
+  for (;;) {
+    const seq = String(Math.floor(100000 + Math.random() * 900000));
+    const candidate = `APP-${year}-${seq}`;
+    const existing = await prisma.application.findUnique({
+      where: { reference_no: candidate },
+      select: { id: true },
+    });
+    if (!existing) return candidate;
+  }
+}
+
+// "If something is not for you, it should not appear to you": each office's
+// queue is scoped server-side to the statuses that office is competent for.
+// DRAFT is excluded everywhere — drafts belong to the citizen alone.
+function officerQueueFilter(role: string): Prisma.ApplicationWhereInput {
+  switch (role) {
+    case 'sub_divisional_officer':
+      return {
+        status: { in: ['SUBMITTED', 'RECEIPTED', 'PUBLISHED', 'QUERIED', 'REJECTED'] },
+      };
+    case 'surveyor':
+      // Only files awaiting the Procès-Verbal de Bornage
+      return { status: 'PUBLISHED' };
+    case 'divisional_delegate':
+      return { status: { in: ['SURVEYED', 'REGIONAL_REVIEW'] } };
+    case 'regional_delegate':
+      return { status: { in: ['REGIONAL_REVIEW', 'OPPOSITION_WINDOW'] } };
+    case 'registrar':
+      return {
+        OR: [
+          {
+            status: {
+              in: ['REGIONAL_REVIEW', 'OPPOSITION_WINDOW', 'CLEARED', 'TITLE_ISSUED'],
+            },
+          },
+          // Notarial fast-track files land on the Conservateur's desk at receipt
+          {
+            status: 'RECEIPTED',
+            type: { in: ['TOTAL_ALIENATION', 'MORTGAGE'] },
+          },
+        ],
+      };
+    default:
+      // Oversight roles (governor, chief, admin) see everything except drafts
+      return { status: { not: 'DRAFT' } };
+  }
 }
 
 // Maps new_status → a human-readable step label stored in the Approval record
@@ -113,15 +165,19 @@ export async function submitApplication(req: Request, res: Response): Promise<vo
     select: { doc_type: true },
   });
   const docTypes = new Set(docs.map((d) => d.doc_type));
-  if (!docTypes.has('ID_CARD') || !docTypes.has('SITE_PLAN')) {
+  // Type-specific statutory requirements: PARTITION needs the court judgment /
+  // inheritance certificate; alienations & mortgages need the notarial act.
+  const missing = requiredDocTypes(application.type).filter((d) => !docTypes.has(d.doc_type));
+  if (missing.length > 0) {
     res.status(400).json({
-      message:
-        'Mandatory documents missing. You must upload an ID card and Site Plan before submitting.',
+      message: `Mandatory documents missing for this application type: ${missing
+        .map((d) => d.label)
+        .join(', ')}.`,
     });
     return;
   }
 
-  const reference_no = generateReferenceNo();
+  const reference_no = await generateReferenceNo();
 
   const updated = await prisma.application.update({
     where: { id },
@@ -153,6 +209,13 @@ export async function transitionApplication(req: Request, res: Response): Promis
   const application = await prisma.application.findUnique({ where: { id } });
   if (!application) {
     res.status(404).json({ message: 'Application not found' });
+    return;
+  }
+
+  // Legal state machine: only statutory transitions, by the competent office
+  const check = checkTransition(application.type, application.status, new_status, req.user!.role);
+  if (!check.ok) {
+    res.status(check.status).json({ message: check.message });
     return;
   }
 
@@ -199,6 +262,16 @@ export async function regionalApprove(req: Request, res: Response): Promise<void
     return;
   }
 
+  // The 30-day opposition window is a first-registration formality. Notarial
+  // transfers and subdivisions of already-titled land never pass through it.
+  if (!requiresOppositionWindow(application.type)) {
+    res.status(409).json({
+      message:
+        'This application type does not pass through the public opposition window. Clear it directly for registration instead.',
+    });
+    return;
+  }
+
   if (!application.reference_no) {
     res.status(409).json({ message: 'Application has no reference number' });
     return;
@@ -207,6 +280,9 @@ export async function regionalApprove(req: Request, res: Response): Promise<void
   const location = application.parcel
     ? [application.parcel.division, application.parcel.sub_division].filter(Boolean).join(', ')
     : 'unspecified location';
+
+  // Statutory window length is admin-configurable (SystemSettings)
+  const { opposition_window_days: windowDays } = await getSystemSettings();
 
   const [updated] = await prisma.$transaction([
     prisma.application.update({
@@ -219,13 +295,13 @@ export async function regionalApprove(req: Request, res: Response): Promise<void
         step: 'Regional Review',
         actor_id: req.user!.id,
         role: req.user!.role,
-        decision: 'Dossier approved at regional level; 30-day opposition window opened.',
+        decision: `Dossier approved at regional level; ${windowDays}-day opposition window opened.`,
       },
     }),
     prisma.bulletinEntry.create({
       data: {
         reference: application.reference_no,
-        summary: `Avis de clôture de bornage for parcel at ${location}. 30-day opposition window active.`,
+        summary: `Avis de clôture de bornage for parcel at ${location}. ${windowDays}-day opposition window active.`,
       },
     }),
   ]);
@@ -233,13 +309,14 @@ export async function regionalApprove(req: Request, res: Response): Promise<void
   res.json({ message: 'Application approved at regional level', application: updated });
 }
 
-// GET /applications  — officer-scoped by region
+// GET /applications  — officer-scoped by region, role and stage; never drafts
 export async function listApplications(req: Request, res: Response): Promise<void> {
   const region = req.user!.region;
 
   const applications = await prisma.application.findMany({
     where: {
       applicant: { region },
+      ...officerQueueFilter(req.user!.role),
     },
     include: {
       applicant: {
@@ -278,7 +355,8 @@ export async function getApplication(req: Request, res: Response): Promise<void>
     },
   });
 
-  if (!application) {
+  if (!application || application.status === 'DRAFT') {
+    // Drafts are the citizen's private working copy — invisible to officers
     res.status(404).json({ message: 'Application not found' });
     return;
   }

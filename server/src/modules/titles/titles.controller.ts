@@ -5,7 +5,10 @@ import { prisma } from '../../db/prisma';
 import { generateTitleCertificatePdf } from '../../services/pdf.service';
 import { appendLog } from '../../services/ledger.service';
 
-const ISSUABLE_STATUSES = new Set(['OPPOSITION_WINDOW', 'CLEARED']);
+// Title issuance requires the file to be formally CLEARED first. Issuing
+// straight from OPPOSITION_WINDOW would let the registrar bypass the statutory
+// closing of the 30-day window.
+const ISSUABLE_STATUSES = new Set(['CLEARED']);
 
 class IssueTitleError extends Error {
   constructor(
@@ -47,7 +50,7 @@ export async function issueTitle(req: Request, res: Response): Promise<void> {
       if (!ISSUABLE_STATUSES.has(application.status)) {
         throw new IssueTitleError(
           409,
-          'Application must be in OPPOSITION_WINDOW or CLEARED status to issue a title',
+          'Application must be in CLEARED status to issue a title',
         );
       }
       if (!application.parcel_id || !application.parcel) {

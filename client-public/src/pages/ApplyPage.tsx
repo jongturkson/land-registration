@@ -99,6 +99,8 @@ export default function ApplyPage() {
     id_card: 'ID_CARD',
     site_plan: 'SITE_PLAN',
     attestation: 'ATTESTATION',
+    judgment: 'JUDGMENT',
+    notarial_act: 'NOTARIAL_ACT',
   };
 
   async function onSubmit(data: WizardFormData) {

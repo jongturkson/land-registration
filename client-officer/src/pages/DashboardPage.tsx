@@ -75,9 +75,11 @@ function getRoleConfig(role: string): RoleConfig {
         title: 'Conservation Foncière',
         subtitle: 'Fako Division · Land Register',
         mandate:
-          'You are the Conservateur Foncier — the final statutory authority. You open the opposition window, clear uncontested files, and enter the parcel in the Livre Foncier to issue the Land Certificate (Titre Foncier).',
+          'You are the Conservateur Foncier — the final statutory authority. You verify notarial acts on fast-track transfers, open the opposition window on first registrations, clear uncontested files, and enter the parcel in the Livre Foncier to issue the Land Certificate (Titre Foncier).',
         accentColor: '#b45309',       // amber-gold — highest authority, "last bus stop"
-        activeStatuses: new Set(['REGIONAL_REVIEW', 'OPPOSITION_WINDOW', 'CLEARED']),
+        // RECEIPTED appears here only for notarial fast-track files —
+        // the server scopes the queue so full-track receipts stay with the SDO
+        activeStatuses: new Set(['RECEIPTED', 'REGIONAL_REVIEW', 'OPPOSITION_WINDOW', 'CLEARED']),
         contextStatuses: new Set(['TITLE_ISSUED']),
         buttonLabel: 'Open File',
       };

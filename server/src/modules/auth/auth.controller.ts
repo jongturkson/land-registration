@@ -81,6 +81,14 @@ export async function login(req: Request, res: Response): Promise<void> {
     return;
   }
 
+  // IAM: suspended officials (transferred, dismissed) cannot sign in
+  if (user.status === 'SUSPENDED') {
+    res.status(403).json({
+      message: 'This account has been suspended. Contact the system administrator.',
+    });
+    return;
+  }
+
   attemptStore.delete(email);
 
   const { hashed_password: _pw, ...safeUser } = user;
@@ -145,7 +153,7 @@ export async function refresh(req: Request, res: Response): Promise<void> {
   try {
     const payload = jwt.verify(refreshToken, env.jwtRefreshSecret) as jwt.JwtPayload;
     const user = await prisma.user.findUnique({ where: { id: payload['id'] as string } });
-    if (!user) {
+    if (!user || user.status === 'SUSPENDED') {
       res.status(401).json({ message: 'Unauthorized' });
       return;
     }

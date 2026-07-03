@@ -13,7 +13,7 @@ import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import Alert from '@mui/material/Alert';
 import api from '../lib/api';
-import { storeAuth, type OfficerUser } from '../lib/auth';
+import { storeAuth, homeRouteFor, type OfficerUser } from '../lib/auth';
 
 const schema = z.object({
   email: z.string().email({ message: 'Enter a valid email' }),
@@ -43,12 +43,14 @@ export default function LoginPage() {
       api.post<LoginResponse>('/auth/login', data).then((r) => r.data),
     onSuccess: ({ accessToken, refreshToken, user }) => {
       storeAuth(accessToken, refreshToken, user);
-      navigate(user.role === 'surveyor' ? '/survey' : '/dashboard');
+      navigate(homeRouteFor(user.role));
     },
     onError: (error: unknown) => {
       if (axios.isAxiosError(error)) {
         if (error.response?.status === 401) {
           setServerError('Email or password is incorrect.');
+        } else if (error.response?.status === 403) {
+          setServerError('This account has been suspended. Contact the system administrator.');
         } else if (error.response?.status === 429) {
           setServerError('Account locked. Try again later.');
         } else {

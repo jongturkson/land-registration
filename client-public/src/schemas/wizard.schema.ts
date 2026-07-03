@@ -98,6 +98,11 @@ export const WizardSchema = z.object({
     id_card: z.any().optional(),
     site_plan: z.any().optional(),
     attestation: z.any().optional(),
+    // Type-specific statutory documents (enforced server-side at submission):
+    // PARTITION requires the court judgment / inheritance certificate;
+    // alienations & mortgages require the notarial act.
+    judgment: z.any().optional(),
+    notarial_act: z.any().optional(),
     others: z.array(z.any()).optional(),
   }),
 

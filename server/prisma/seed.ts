@@ -42,6 +42,12 @@ const ACCOUNTS = [
     role: 'registrar',
     region: 'fako',
   },
+  {
+    email: 'admin@test.com',
+    full_name: 'Achille Fongang',
+    role: 'admin',
+    region: 'fako',
+  },
 ];
 
 async function main() {

@@ -30,13 +30,11 @@ p, governor, fako, document, read
 p, governor, fako, analytics, read
 p, chief, fako, application, read
 p, chief, fako, document, read
-p, admin, fako, application, read
-p, admin, fako, application, update
-p, admin, fako, document, read
-p, admin, fako, title, read
 p, admin, fako, audit, read
 p, admin, fako, audit, verify
 p, admin, fako, analytics, read
+p, admin, fako, system_users, manage
+p, admin, fako, system_settings, manage
 
 g, registrar, registrar, fako
 g, sub_divisional_officer, sub_divisional_officer, fako

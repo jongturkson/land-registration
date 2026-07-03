@@ -19,18 +19,26 @@ export default function AppShell() {
     navigate('/login', { replace: true });
   }
 
-  // Registrar-only tools: title registry, cryptographic ledger, analytics
-  const navLinks =
-    user?.role === 'registrar'
-      ? [
-          { to: '/dashboard', label: t('shell.nav.dashboard') },
-          { to: '/titles', label: t('shell.nav.titles') },
-          { to: '/audit', label: t('shell.nav.audit') },
-          { to: '/analytics', label: t('shell.nav.analytics') },
-        ]
-      : user?.role === 'surveyor'
-        ? []
-        : [{ to: '/dashboard', label: t('shell.nav.dashboard') }];
+  // Strict role-based navigation — links outside the officer's mandate are
+  // not rendered at all (mirrors the RoleRoute guards in App.tsx).
+  function navLinksFor(role: string | undefined): { to: string; label: string }[] {
+    const dashboard = { to: '/dashboard', label: t('shell.nav.dashboard') };
+    const titles = { to: '/titles', label: t('shell.nav.titles') };
+    const audit = { to: '/audit', label: t('shell.nav.audit') };
+    const analytics = { to: '/analytics', label: t('shell.nav.analytics') };
+
+    switch (role) {
+      case 'registrar':
+        return [dashboard, titles, audit, analytics];
+      case 'governor':
+        return [dashboard, analytics];
+      case 'surveyor':
+        return [];
+      default:
+        return [dashboard];
+    }
+  }
+  const navLinks = navLinksFor(user?.role);
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>

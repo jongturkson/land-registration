@@ -8,7 +8,7 @@ import {
 import { useWatch } from 'react-hook-form';
 import { type WizardStepProps } from '../../schemas/wizard.schema';
 
-const REQUIRED_DOCS = [
+const BASE_DOCS = [
   {
     key: 'id_card' as const,
     label: 'National ID Card',
@@ -26,7 +26,31 @@ const REQUIRED_DOCS = [
   },
 ] as const;
 
-type DocKey = (typeof REQUIRED_DOCS)[number]['key'];
+// Statutory extras per application type — required before submission
+const JUDGMENT_DOC = {
+  key: 'judgment' as const,
+  label: 'Court Judgment / Inheritance Certificate',
+  hint: 'The partition judgment or notarial inheritance certificate establishing the heirs and their shares. Required for partition applications.',
+};
+
+const NOTARIAL_ACT_DOC = {
+  key: 'notarial_act' as const,
+  label: 'Notarial Act (Acte Notarié)',
+  hint: 'The notarized deed of sale, transfer or mortgage. Private agreements have no legal effect on titled land.',
+};
+
+type DocKey =
+  | (typeof BASE_DOCS)[number]['key']
+  | typeof JUDGMENT_DOC.key
+  | typeof NOTARIAL_ACT_DOC.key;
+
+function docsForType(type: string | undefined) {
+  if (type === 'PARTITION') return [...BASE_DOCS, JUDGMENT_DOC];
+  if (type === 'TOTAL_ALIENATION' || type === 'PARTIAL_ALIENATION' || type === 'MORTGAGE') {
+    return [...BASE_DOCS, NOTARIAL_ACT_DOC];
+  }
+  return [...BASE_DOCS];
+}
 
 function FileField({
   label,
@@ -102,6 +126,8 @@ export default function StepDocuments({ form }: WizardStepProps) {
   const { setValue, control } = form;
   const otherInputRef = useRef<HTMLInputElement>(null);
   const others = (useWatch({ control, name: 'documents.others' }) as File[] | undefined) ?? [];
+  const appType = useWatch({ control, name: 'type' }) as string | undefined;
+  const requiredDocs = docsForType(appType);
 
   function handleFile(key: DocKey, file: File | null) {
     setValue(`documents.${key}`, file ?? undefined);
@@ -131,10 +157,16 @@ export default function StepDocuments({ form }: WizardStepProps) {
       </Typography>
       <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 3 }}>
         ID Card and Site Plan are required before you can submit. Attestation is optional.
+        {appType === 'PARTITION' &&
+          ' Partition applications also require the court judgment or inheritance certificate.'}
+        {(appType === 'TOTAL_ALIENATION' ||
+          appType === 'PARTIAL_ALIENATION' ||
+          appType === 'MORTGAGE') &&
+          ' This application type also requires the notarial act (acte notarié).'}
       </Typography>
 
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {REQUIRED_DOCS.map(({ key, label, hint }) => (
+        {requiredDocs.map(({ key, label, hint }) => (
           <FileField
             key={key}
             fieldKey={key}
