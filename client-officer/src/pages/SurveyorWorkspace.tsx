@@ -35,17 +35,22 @@ const TYPE_LABELS: Record<string, string> = {
   STATE_LAND: 'State Land',
   PARTITION: 'Partition',
   MORTGAGE: 'Mortgage',
+  MORTGAGE_RELEASE: 'Mortgage Release',
   TRANSFORMATION: 'Transformation',
 };
+
+// PUBLISHED = first-registration bornage after public notice;
+// SURVEY_ORDERED = carve-out survey commissioned directly by the Registrar
+const SURVEYABLE = new Set(['PUBLISHED', 'SURVEY_ORDERED']);
 
 export default function SurveyorWorkspace() {
   const navigate = useNavigate();
 
   const { data: applications, isLoading, isError } = useQuery({
-    queryKey: ['applications', 'published'],
+    queryKey: ['applications', 'surveyable'],
     queryFn: () =>
       api.get<Application[]>('/applications').then((r) =>
-        r.data.filter((a) => a.status === 'PUBLISHED'),
+        r.data.filter((a) => SURVEYABLE.has(a.status)),
       ),
   });
 
@@ -76,7 +81,8 @@ export default function SurveyorWorkspace() {
         Survey Queue
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Applications in Public Notice stage awaiting cadastral survey.
+        Files awaiting cadastral survey — public-notice bornages and Registrar-commissioned
+        carve-out surveys (morcellements).
       </Typography>
 
       {!applications?.length ? (

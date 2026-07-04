@@ -34,6 +34,9 @@ const VALID_DOC_TYPES = new Set([
   'ID_CARD',
   'SITE_PLAN',
   'ATTESTATION',
+  'JUDGMENT', // court judgment / inheritance certificate (Partition)
+  'NOTARIAL_ACT', // acte notarié (Total/Partial Alienation, Mortgage)
+  'RELEASE_DEED', // creditor's release deed — mainlevée notariée (Mortgage Release)
   'PROCES_VERBAL',
   'CADASTRAL_PLAN',
   'OTHER',
@@ -45,9 +48,9 @@ export async function uploadDocument(req: Request, res: Response): Promise<void>
   const { doc_type } = req.body as { doc_type?: string };
 
   if (!doc_type || !VALID_DOC_TYPES.has(doc_type)) {
+    // Derive the list from the source of truth so it never goes stale again
     res.status(400).json({
-      message:
-        'Invalid or missing doc_type. Accepted: ID_CARD, SITE_PLAN, ATTESTATION, PROCES_VERBAL, CADASTRAL_PLAN',
+      message: `Invalid or missing doc_type. Accepted: ${[...VALID_DOC_TYPES].join(', ')}`,
     });
     return;
   }

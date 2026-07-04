@@ -4,6 +4,8 @@ import { Request, Response } from 'express';
 import { prisma } from '../../db/prisma';
 import { generateTitleCertificatePdf } from '../../services/pdf.service';
 import { appendLog } from '../../services/ledger.service';
+import { CancelTitleSchema } from '../../shared/schemas/title.schema';
+import { DIRECT_TYPES, trackFor } from '../applications/workflow';
 
 // Title issuance requires the file to be formally CLEARED first. Issuing
 // straight from OPPOSITION_WINDOW would let the registrar bypass the statutory
@@ -33,7 +35,13 @@ function generateFolio(): string {
   return String(Math.floor(1 + Math.random() * 200));
 }
 
-// POST /applications/:id/issue-title — registrar-only, final statutory act of immatriculation
+// POST /applications/:id/issue-title — registrar-only, final statutory act.
+// FULL track: immatriculation of a new parcel.
+// CARVE_OUT track: issuance of the child title AND geometric reduction of the
+// mother parcel (morcellement) — the mother title stays VALID with its new,
+// smaller consistency.
+// Registrar-direct types (mutation totale / hypothèque / mainlevée) never issue
+// a title — they are finalised through /execute instead.
 export async function issueTitle(req: Request, res: Response): Promise<void> {
   const applicationId = req.params['id'] as string;
 
@@ -41,11 +49,21 @@ export async function issueTitle(req: Request, res: Response): Promise<void> {
     const result = await prisma.$transaction(async (tx) => {
       const application = await tx.application.findUnique({
         where: { id: applicationId },
-        include: { applicant: true, parcel: true },
+        include: {
+          applicant: true,
+          parcel: true,
+          source_title: { include: { parcel: true, owners: { where: { is_current: true } } } },
+        },
       });
 
       if (!application) {
         throw new IssueTitleError(404, 'Application not found');
+      }
+      if (DIRECT_TYPES.has(application.type)) {
+        throw new IssueTitleError(
+          409,
+          'This application type mutates the existing title — finalise it with the Execute Registration action, not title issuance.',
+        );
       }
       if (!ISSUABLE_STATUSES.has(application.status)) {
         throw new IssueTitleError(
@@ -55,6 +73,11 @@ export async function issueTitle(req: Request, res: Response): Promise<void> {
       }
       if (!application.parcel_id || !application.parcel) {
         throw new IssueTitleError(409, 'Application has no associated parcel');
+      }
+
+      const isCarveOut = trackFor(application.type) === 'CARVE_OUT';
+      if (isCarveOut && !application.source_title) {
+        throw new IssueTitleError(409, 'Carve-out application has no source (mother) title');
       }
 
       // Legal blocker: an unresolved opposition freezes the immatriculation.
@@ -108,16 +131,62 @@ export async function issueTitle(req: Request, res: Response): Promise<void> {
         },
       });
 
+      // ── Morcellement: shrink the mother parcel by the carved-out child ────
+      // The child polygon was validated (ST_Within) at survey time. Here the
+      // mother's geometry becomes mother − child and its legal area is
+      // recomputed from the remaining geometry. If the subtraction fragments
+      // the mother into several pieces (MultiPolygon), the stored polygon is
+      // left untouched but the area is still corrected.
+      let remainingMotherArea: string | null = null;
+      if (isCarveOut && application.source_title) {
+        const motherParcelId = application.source_title.parcel_id;
+        await tx.$executeRaw`
+          UPDATE "Parcel" p
+          SET geom = CASE
+                       WHEN GeometryType(d.diff) = 'POLYGON' THEN d.diff
+                       ELSE p.geom
+                     END,
+              area_sqm = ROUND(ST_Area(d.diff::geography)::numeric, 2)
+          FROM (
+            SELECT ST_Difference(m.geom, c.geom) AS diff
+            FROM "Parcel" m, "Parcel" c
+            WHERE m.id = ${motherParcelId}::uuid
+              AND c.id = ${application.parcel.id}::uuid
+          ) d
+          WHERE p.id = ${motherParcelId}::uuid AND d.diff IS NOT NULL
+        `;
+        const areaRows = await tx.$queryRaw<{ area_sqm: string | null }[]>`
+          SELECT area_sqm::text AS area_sqm FROM "Parcel" WHERE id = ${motherParcelId}::uuid
+        `;
+        remainingMotherArea = areaRows[0]?.area_sqm ?? null;
+
+        // Ledger: both sides of the morcellement
+        await appendLog(
+          req.user!.id,
+          req.user!.role,
+          'PARTIAL_ALIENATION_SENDER',
+          'TITLE',
+          application.source_title.id,
+          {
+            title_no: application.source_title.title_no,
+            remaining_area_sqm: remainingMotherArea,
+            child_title_no: title.title_no,
+            application_id: application.id,
+          },
+          tx,
+        );
+      }
+
       const updatedApplication = await tx.application.update({
         where: { id: applicationId },
         data: { status: 'TITLE_ISSUED' },
       });
 
-      // Digital Livre Foncier: hash-chained ledger entry for the immatriculation event
+      // Digital Livre Foncier: hash-chained ledger entry for the issuance event
       await appendLog(
         req.user!.id,
         req.user!.role,
-        'IMMATRICULATION',
+        isCarveOut ? 'PARTIAL_ALIENATION_RECEIVER' : 'IMMATRICULATION',
         'TITLE',
         title.id,
         {
@@ -128,6 +197,9 @@ export async function issueTitle(req: Request, res: Response): Promise<void> {
           owner: owner.full_name,
           issued_by: req.user!.id,
           issued_at: title.issued_at,
+          ...(isCarveOut && application.source_title
+            ? { mother_title_no: application.source_title.title_no }
+            : {}),
         },
         tx,
       );
@@ -198,4 +270,66 @@ export async function downloadTitleCertificate(req: Request, res: Response): Pro
   }
 
   res.download(title.certificate_pdf_path, `${path.basename(title.certificate_pdf_path)}`);
+}
+
+// POST /titles/:title_no/cancel — ministerial cancellation (retrait du titre).
+// The register is otherwise append-only: this is the sole direct registry
+// action left to the Conservateur, and it demands the ministerial order
+// reference plus an explicit confirmation. The title row is preserved with
+// status CANCELLED — never deleted — and the act is chained to the ledger.
+export async function cancelTitle(req: Request, res: Response): Promise<void> {
+  const title_no = req.params['title_no'] as string;
+
+  const parse = CancelTitleSchema.safeParse(req.body);
+  if (!parse.success) {
+    res.status(400).json({ message: 'Invalid request', errors: parse.error.issues });
+    return;
+  }
+  const { ministerial_order_ref, reason } = parse.data;
+
+  const title = await prisma.title.findUnique({
+    where: { title_no },
+    include: { owners: { where: { is_current: true }, select: { full_name: true } } },
+  });
+  if (!title) {
+    res.status(404).json({ message: 'Title not found' });
+    return;
+  }
+  if (title.status !== 'VALID') {
+    res.status(409).json({ message: 'Only VALID titles can be cancelled' });
+    return;
+  }
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const cancelled = await tx.title.update({
+      where: { id: title.id },
+      data: {
+        status: 'CANCELLED',
+        cancelled_at: new Date(),
+        cancellation_ref: ministerial_order_ref,
+      },
+    });
+
+    await appendLog(
+      req.user!.id,
+      req.user!.role,
+      'TITLE_CANCELLED',
+      'TITLE',
+      title.id,
+      {
+        title_no: title.title_no,
+        ministerial_order_ref,
+        reason: reason ?? null,
+        owner: title.owners[0]?.full_name ?? null,
+      },
+      tx,
+    );
+
+    return cancelled;
+  });
+
+  res.json({
+    message: `Title ${title_no} cancelled by ministerial order ${ministerial_order_ref}`,
+    title: updated,
+  });
 }

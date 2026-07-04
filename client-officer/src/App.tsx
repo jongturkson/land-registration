@@ -5,7 +5,6 @@ import ApplicationDetail from './pages/ApplicationDetail';
 import SurveyorWorkspace from './pages/SurveyorWorkspace';
 import SurveyorDetail from './pages/SurveyorDetail';
 import TitleManagement from './pages/TitleManagement';
-import TitleSubdivision from './pages/TitleSubdivision';
 import AuditLedger from './pages/AuditLedger';
 import AdminDashboard from './pages/AdminDashboard';
 import UserManagement from './pages/admin/UserManagement';
@@ -40,12 +39,11 @@ export default function App() {
         </Route>
       </Route>
 
-      {/* Conservateur Foncier tools — title registry & subdivision */}
+      {/* Conservateur Foncier tools — registry consultation & cancellation */}
       <Route element={<RoleRoute roles={['registrar']} />}>
         <Route element={<AppShell />}>
           <Route path="/titles" element={<TitleManagement />} />
           <Route path="/audit" element={<AuditLedger />} />
-          <Route path="/titles/:title_no/subdivide" element={<TitleSubdivision />} />
         </Route>
       </Route>
 

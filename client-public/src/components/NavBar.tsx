@@ -52,6 +52,9 @@ export default function NavBar() {
 
         {user ? (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Button component={Link} to="/my-applications" color="inherit" size="small">
+              {t('nav.myApplications')}
+            </Button>
             <Typography variant="body2" sx={{ opacity: 0.85, display: { xs: 'none', sm: 'block' } }}>
               {user.full_name}
             </Typography>

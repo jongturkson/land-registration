@@ -5,51 +5,84 @@
 // Three statutory tracks:
 //
 //  FULL (immatriculation) — DIRECT_REGISTRATION, STATE_LAND, TRANSFORMATION
+//    First registration of untitled land: reception desk, public notice,
+//    survey, regional review and the mandatory opposition window.
 //    SUBMITTED → RECEIPTED → PUBLISHED → SURVEYED → REGIONAL_REVIEW
-//    → OPPOSITION_WINDOW (mandatory 30-day window after the avis de clôture)
-//    → CLEARED → TITLE_ISSUED
+//    → OPPOSITION_WINDOW → CLEARED → TITLE_ISSUED
 //
-//  SURVEY, NO OPPOSITION — PARTIAL_ALIENATION (morcellement), PARTITION
-//    The parent parcel is already titled, so no public opposition window is
-//    required — but new boundaries must be demarcated:
-//    SUBMITTED → RECEIPTED → PUBLISHED → SURVEYED → REGIONAL_REVIEW → CLEARED
-//    → TITLE_ISSUED
-//    PARTITION additionally requires a court judgment / notarial partition
-//    deed at submission (see REQUIRED_DOCS).
+//  CARVE-OUT (registrar-led morcellement) — PARTIAL_ALIENATION, PARTITION
+//    The mother parcel is already titled, so the file goes straight to the
+//    Conservateur Foncier — no SDO reception, no public notice, no opposition
+//    window. The Registrar verifies the notarial act / partition judgment and
+//    the mother title, commissions the survey (the child parcel is carved out
+//    of the mother polygon), then issues the child title and reduces the
+//    mother parcel:
+//    SUBMITTED → SURVEY_ORDERED → SURVEYED → CLEARED → TITLE_ISSUED
 //
-//  NOTARIAL FAST-TRACK — TOTAL_ALIENATION (mutation totale), MORTGAGE
-//    The parcel and its survey already exist; the notarial act goes directly
-//    to the Conservateur Foncier, bypassing public notice and opposition:
-//    SUBMITTED → RECEIPTED → CLEARED → TITLE_ISSUED
+//  REGISTRAR-DIRECT — TOTAL_ALIENATION, MORTGAGE, MORTGAGE_RELEASE
+//    The parcel and its survey already exist; the notarial deed goes directly
+//    to the Conservateur Foncier who verifies it and executes the register
+//    entry (ownership mutation, encumbrance inscription or mainlevée). No new
+//    title is issued — the existing title is mutated:
+//    SUBMITTED → CLEARED → COMPLETED
 //
 // Statuses set exclusively by dedicated endpoints (never via /transition):
 //   SURVEYED           — POST /applications/:id/survey        (surveyor)
 //   OPPOSITION_WINDOW  — POST /applications/:id/regional-approve
 //   TITLE_ISSUED       — POST /applications/:id/issue-title   (registrar)
+//   COMPLETED          — POST /applications/:id/execute       (registrar)
 
-export const FAST_TRACK_TYPES = new Set(['TOTAL_ALIENATION', 'MORTGAGE']);
-export const NO_OPPOSITION_TYPES = new Set(['PARTIAL_ALIENATION', 'PARTITION']);
+export const FULL_TYPES = new Set(['DIRECT_REGISTRATION', 'STATE_LAND', 'TRANSFORMATION']);
+export const CARVE_OUT_TYPES = new Set(['PARTIAL_ALIENATION', 'PARTITION']);
+export const DIRECT_TYPES = new Set(['TOTAL_ALIENATION', 'MORTGAGE', 'MORTGAGE_RELEASE']);
+
+// Types that operate on an existing title — the application MUST reference it
+export const SOURCE_TITLE_TYPES = new Set([...CARVE_OUT_TYPES, ...DIRECT_TYPES]);
+
+export type Track = 'FULL' | 'CARVE_OUT' | 'DIRECT';
+
+export function trackFor(type: string): Track {
+  if (CARVE_OUT_TYPES.has(type)) return 'CARVE_OUT';
+  if (DIRECT_TYPES.has(type)) return 'DIRECT';
+  return 'FULL';
+}
 
 export function requiresOppositionWindow(type: string): boolean {
-  return !FAST_TRACK_TYPES.has(type) && !NO_OPPOSITION_TYPES.has(type);
+  return FULL_TYPES.has(type);
 }
 
 // Documents that must be uploaded before an application can be submitted.
-// PARTITION (inheritance / co-ownership division) legally requires the court
-// partition judgment or notarial inheritance certificate; alienations and
-// mortgages of titled land are void without a notarial act.
+// PARTITION legally requires the court partition judgment or notarial
+// inheritance certificate; alienations and mortgages of titled land are void
+// without a notarial act; a mainlevée requires the creditor's release deed.
+// Registrar-direct types operate on an already-surveyed parcel, so no site
+// plan is demanded.
 export function requiredDocTypes(type: string): { doc_type: string; label: string }[] {
-  const base = [
-    { doc_type: 'ID_CARD', label: 'ID card' },
-    { doc_type: 'SITE_PLAN', label: 'Site Plan' },
-  ];
-  if (type === 'PARTITION') {
-    return [...base, { doc_type: 'JUDGMENT', label: 'Court judgment / inheritance certificate' }];
+  const idCard = { doc_type: 'ID_CARD', label: 'ID card' };
+  const sitePlan = { doc_type: 'SITE_PLAN', label: 'Site Plan' };
+  const notarialAct = { doc_type: 'NOTARIAL_ACT', label: 'Notarial act (acte notarié)' };
+
+  switch (type) {
+    case 'PARTITION':
+      return [
+        idCard,
+        sitePlan,
+        { doc_type: 'JUDGMENT', label: 'Court judgment / inheritance certificate' },
+      ];
+    case 'PARTIAL_ALIENATION':
+      return [idCard, sitePlan, notarialAct];
+    case 'TOTAL_ALIENATION':
+    case 'MORTGAGE':
+      return [idCard, notarialAct];
+    case 'MORTGAGE_RELEASE':
+      return [
+        idCard,
+        { doc_type: 'RELEASE_DEED', label: "Creditor's release deed (mainlevée notariée)" },
+      ];
+    default:
+      // First registrations
+      return [idCard, sitePlan];
   }
-  if (type === 'TOTAL_ALIENATION' || type === 'PARTIAL_ALIENATION' || type === 'MORTGAGE') {
-    return [...base, { doc_type: 'NOTARIAL_ACT', label: 'Notarial act (acte notarié)' }];
-  }
-  return base;
 }
 
 // Note: the admin role is deliberately absent — Admin is IT oversight and
@@ -65,10 +98,66 @@ interface TransitionRule {
 }
 
 // Allowed transitions through the generic /transition endpoint, per current
-// status. Rules are further narrowed by application type below.
+// status. Rules are narrowed by the application's statutory track.
 function rulesFor(type: string, from: string): TransitionRule[] {
-  const fast = FAST_TRACK_TYPES.has(type);
+  const track = trackFor(type);
 
+  // ── Registrar-led carve-out (morcellement of a titled mother parcel) ─────
+  if (track === 'CARVE_OUT') {
+    switch (from) {
+      case 'SUBMITTED':
+        // Registrar verifies the act + mother title, then commissions the survey
+        return [
+          { to: 'SURVEY_ORDERED', roles: [REGISTRAR] },
+          { to: 'REJECTED', roles: [REGISTRAR] },
+          { to: 'QUERIED', roles: [REGISTRAR] },
+        ];
+      case 'SURVEY_ORDERED':
+        // SURVEYED is reachable only via the survey endpoint
+        return [{ to: 'QUERIED', roles: [REGISTRAR] }];
+      case 'SURVEYED':
+        return [
+          { to: 'CLEARED', roles: [REGISTRAR] },
+          { to: 'REJECTED', roles: [REGISTRAR] },
+          { to: 'QUERIED', roles: [REGISTRAR] },
+        ];
+      case 'CLEARED':
+        // TITLE_ISSUED is reachable only via the issue-title endpoint
+        return [{ to: 'QUERIED', roles: [REGISTRAR] }];
+      case 'QUERIED':
+        // After correction the file re-opens on the Conservateur's desk
+        return [
+          { to: 'SUBMITTED', roles: [REGISTRAR] },
+          { to: 'REJECTED', roles: [REGISTRAR] },
+        ];
+      default:
+        return [];
+    }
+  }
+
+  // ── Registrar-direct (mutation totale, hypothèque, mainlevée) ────────────
+  if (track === 'DIRECT') {
+    switch (from) {
+      case 'SUBMITTED':
+        return [
+          { to: 'CLEARED', roles: [REGISTRAR] },
+          { to: 'REJECTED', roles: [REGISTRAR] },
+          { to: 'QUERIED', roles: [REGISTRAR] },
+        ];
+      case 'CLEARED':
+        // COMPLETED is reachable only via the execute endpoint
+        return [{ to: 'QUERIED', roles: [REGISTRAR] }];
+      case 'QUERIED':
+        return [
+          { to: 'SUBMITTED', roles: [REGISTRAR] },
+          { to: 'REJECTED', roles: [REGISTRAR] },
+        ];
+      default:
+        return [];
+    }
+  }
+
+  // ── Full first-registration track ─────────────────────────────────────────
   switch (from) {
     case 'SUBMITTED':
       return [
@@ -78,14 +167,6 @@ function rulesFor(type: string, from: string): TransitionRule[] {
       ];
 
     case 'RECEIPTED':
-      if (fast) {
-        // Notarial file goes straight to the Conservateur Foncier
-        return [
-          { to: 'CLEARED', roles: [REGISTRAR] },
-          { to: 'REJECTED', roles: [REGISTRAR] },
-          { to: 'QUERIED', roles: [REGISTRAR, SDO] },
-        ];
-      }
       return [
         { to: 'PUBLISHED', roles: [SDO] },
         { to: 'QUERIED', roles: [SDO] },
@@ -102,14 +183,6 @@ function rulesFor(type: string, from: string): TransitionRule[] {
       ];
 
     case 'REGIONAL_REVIEW':
-      if (NO_OPPOSITION_TYPES.has(type)) {
-        // Titled parent parcel — no public opposition window required
-        return [
-          { to: 'CLEARED', roles: [REGISTRAR, REGIONAL] },
-          { to: 'REJECTED', roles: [REGISTRAR, REGIONAL] },
-          { to: 'QUERIED', roles: [REGISTRAR, REGIONAL] },
-        ];
-      }
       // First registrations MUST pass through the opposition window,
       // which is opened via /regional-approve — not via /transition.
       return [
@@ -137,6 +210,7 @@ function rulesFor(type: string, from: string): TransitionRule[] {
     // Terminal or citizen-owned states — no officer transitions
     case 'DRAFT':
     case 'TITLE_ISSUED':
+    case 'COMPLETED':
     case 'REJECTED':
     default:
       return [];

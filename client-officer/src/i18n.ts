@@ -35,11 +35,13 @@ const resources = {
         RECEIPTED: 'Receipted',
         PUBLISHED: 'Public Notice',
         BOARD_SCHEDULED: 'Board Scheduled',
+        SURVEY_ORDERED: 'Survey Ordered',
         SURVEYED: 'Surveyed',
         REGIONAL_REVIEW: 'Regional Review',
         OPPOSITION_WINDOW: 'Opposition Window',
         CLEARED: 'Cleared',
         TITLE_ISSUED: 'Title Issued',
+        COMPLETED: 'Registered',
         QUERIED: 'Queried',
         REJECTED: 'Rejected',
       },
@@ -66,7 +68,10 @@ const resources = {
       },
       titles: {
         title: 'Title Registry (Livre Foncier)',
-        subtitle: 'All valid land certificates. Record mutations, mortgages and subdivisions.',
+        subtitle:
+          'All valid land certificates — registry consultation. Mutations, mortgages, releases and subdivisions are executed only through citizen applications.',
+        readOnlyNote:
+          'This register is read-only. Every change (transfer, mortgage, mainlevée, morcellement) must arrive as an application and be executed through the application workflow. The sole direct act is the ministerial cancellation of a title.',
         empty: 'No valid titles in the register yet.',
         columns: {
           titleNo: 'Title No.',
@@ -77,46 +82,20 @@ const resources = {
           encumbrances: 'Encumbrances',
         },
         mortgaged: 'MORTGAGED',
-        transferBtn: 'Transfer Title',
-        mortgageBtn: 'Register Mortgage',
-        subdivideBtn: 'Subdivide',
-        transferDialog: {
-          title: 'Total Alienation — Transfer Title {{titleNo}}',
-          body: 'The current owner will be deactivated and the new owner recorded in the Livre Foncier. This mutation is permanently appended to the cryptographic ledger.',
-          newOwnerName: 'New owner — full name',
-          ancestors: 'Parents (Fils/Fille de … et de …)',
-          birthPlace: 'Place of birth',
-          birthDate: 'Date of birth',
-          deedRef: 'Notarial deed reference',
-          submit: 'Record Transfer',
-          success: 'Title transferred. Mutation recorded in the ledger.',
+        downloadBtn: 'Certificate',
+        cancelBtn: 'Cancel Title',
+        cancelDialog: {
+          title: 'Ministerial Cancellation — Title {{titleNo}}',
+          warning:
+            'This is an irreversible statutory act. The title will be marked CANCELLED in the register and will fail public verification. The record is preserved — never deleted.',
+          body: 'Current owner: {{owner}}. Cancellation of a land title can only follow an order of the Minister of State Property and Land Tenure. Record the ministerial order reference below.',
+          orderRef: 'Ministerial order reference',
+          reason: 'Grounds / observations (optional)',
+          confirmLabel:
+            'I confirm I hold the ministerial order directing the cancellation of this title, and I understand this act cannot be undone.',
+          submit: 'Cancel This Title',
+          success: 'Title {{titleNo}} cancelled and the act appended to the ledger.',
         },
-        mortgageDialog: {
-          title: 'Register Mortgage on {{titleNo}}',
-          body: 'An ACTIVE mortgage (hypothèque) encumbrance will be inscribed against this title and appended to the cryptographic ledger.',
-          creditor: 'Creditor (bank / lender)',
-          amount: 'Secured amount (FCFA)',
-          submit: 'Register Mortgage',
-          success: 'Mortgage registered and recorded in the ledger.',
-        },
-      },
-      subdivision: {
-        title: 'Subdivide Title {{titleNo}} (Morcellement)',
-        subtitle:
-          'Draw the sub-parcel to detach. The new polygon must lie entirely within the mother parcel — spatial validation is enforced by PostGIS.',
-        motherParcel: 'Mother parcel',
-        remainingArea: 'Registered area: {{area}} m²',
-        noGeometry:
-          'This parcel has no registered geometry. A survey must be on file before it can be subdivided.',
-        drawHint: 'Use the polygon tool on the map to draw the new sub-parcel inside the blue boundary.',
-        drawnOk: 'Sub-parcel drawn. Complete the acquirer details below.',
-        newOwner: 'Acquirer (new owner)',
-        areaSqm: 'Partitioned area (m²)',
-        plotNo: 'New plot no.',
-        submit: 'Register Subdivision',
-        success:
-          'Subdivision registered. New title {{titleNo}} created and both mutations appended to the ledger.',
-        redraw: 'Clear drawing',
       },
       disputes: {
         cardTitle: 'Oppositions / Disputes',
@@ -190,11 +169,13 @@ const resources = {
         RECEIPTED: 'Récépissé délivré',
         PUBLISHED: 'Avis public',
         BOARD_SCHEDULED: 'Commission programmée',
+        SURVEY_ORDERED: 'Bornage commandé',
         SURVEYED: 'Bornage effectué',
         REGIONAL_REVIEW: 'Examen régional',
         OPPOSITION_WINDOW: 'Délai d’opposition',
         CLEARED: 'Dossier apuré',
         TITLE_ISSUED: 'Titre délivré',
+        COMPLETED: 'Inscrite au registre',
         QUERIED: 'Requête émise',
         REJECTED: 'Rejetée',
       },
@@ -222,7 +203,9 @@ const resources = {
       titles: {
         title: 'Registre des Titres (Livre Foncier)',
         subtitle:
-          'Tous les titres fonciers valides. Enregistrez les mutations, hypothèques et morcellements.',
+          'Tous les titres fonciers valides — consultation du registre. Les mutations, hypothèques, mainlevées et morcellements ne s’exécutent que par voie de demande.',
+        readOnlyNote:
+          'Ce registre est en consultation seule. Toute modification (mutation, hypothèque, mainlevée, morcellement) doit arriver sous forme de demande et être exécutée par le circuit des demandes. Le seul acte direct est l’annulation ministérielle d’un titre.',
         empty: 'Aucun titre valide dans le registre pour le moment.',
         columns: {
           titleNo: 'N° du Titre',
@@ -233,47 +216,20 @@ const resources = {
           encumbrances: 'Charges',
         },
         mortgaged: 'HYPOTHÉQUÉ',
-        transferBtn: 'Muter le Titre',
-        mortgageBtn: 'Inscrire une Hypothèque',
-        subdivideBtn: 'Morceler',
-        transferDialog: {
-          title: 'Aliénation Totale — Mutation du Titre {{titleNo}}',
-          body: 'Le propriétaire actuel sera désactivé et le nouveau propriétaire inscrit au Livre Foncier. Cette mutation est ajoutée de façon permanente au registre cryptographique.',
-          newOwnerName: 'Nouveau propriétaire — nom complet',
-          ancestors: 'Parents (Fils/Fille de … et de …)',
-          birthPlace: 'Lieu de naissance',
-          birthDate: 'Date de naissance',
-          deedRef: 'Référence de l’acte notarié',
-          submit: 'Enregistrer la Mutation',
-          success: 'Titre muté. Mutation inscrite au registre.',
+        downloadBtn: 'Certificat',
+        cancelBtn: 'Annuler le Titre',
+        cancelDialog: {
+          title: 'Annulation Ministérielle — Titre {{titleNo}}',
+          warning:
+            'Acte statutaire irréversible. Le titre sera marqué ANNULÉ au registre et échouera à la vérification publique. L’enregistrement est conservé — jamais supprimé.',
+          body: 'Propriétaire actuel : {{owner}}. L’annulation d’un titre foncier ne peut résulter que d’un arrêté du Ministre des Domaines, du Cadastre et des Affaires Foncières. Consignez la référence de l’arrêté ci-dessous.',
+          orderRef: 'Référence de l’arrêté ministériel',
+          reason: 'Motifs / observations (facultatif)',
+          confirmLabel:
+            'Je confirme détenir l’arrêté ministériel ordonnant l’annulation de ce titre et je comprends que cet acte est irréversible.',
+          submit: 'Annuler ce Titre',
+          success: 'Titre {{titleNo}} annulé et l’acte ajouté au registre.',
         },
-        mortgageDialog: {
-          title: 'Inscrire une Hypothèque sur {{titleNo}}',
-          body: 'Une hypothèque ACTIVE sera inscrite sur ce titre et ajoutée au registre cryptographique.',
-          creditor: 'Créancier (banque / prêteur)',
-          amount: 'Montant garanti (FCFA)',
-          submit: 'Inscrire l’Hypothèque',
-          success: 'Hypothèque inscrite et enregistrée au registre.',
-        },
-      },
-      subdivision: {
-        title: 'Morcellement du Titre {{titleNo}}',
-        subtitle:
-          'Dessinez la sous-parcelle à détacher. Le nouveau polygone doit être entièrement contenu dans la parcelle mère — validation spatiale imposée par PostGIS.',
-        motherParcel: 'Parcelle mère',
-        remainingArea: 'Superficie enregistrée : {{area}} m²',
-        noGeometry:
-          'Cette parcelle n’a pas de géométrie enregistrée. Un bornage doit être au dossier avant tout morcellement.',
-        drawHint:
-          'Utilisez l’outil polygone de la carte pour dessiner la sous-parcelle à l’intérieur de la limite bleue.',
-        drawnOk: 'Sous-parcelle dessinée. Complétez les informations de l’acquéreur ci-dessous.',
-        newOwner: 'Acquéreur (nouveau propriétaire)',
-        areaSqm: 'Superficie détachée (m²)',
-        plotNo: 'Nouveau n° de lot',
-        submit: 'Enregistrer le Morcellement',
-        success:
-          'Morcellement enregistré. Nouveau titre {{titleNo}} créé et les deux mutations ajoutées au registre.',
-        redraw: 'Effacer le dessin',
       },
       disputes: {
         cardTitle: 'Oppositions / Litiges',

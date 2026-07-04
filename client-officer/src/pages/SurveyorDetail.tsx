@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import L from 'leaflet';
-import { MapContainer, TileLayer, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, LayersControl, GeoJSON, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet-draw/dist/leaflet.draw.css';
 import 'leaflet-draw';
@@ -13,14 +13,22 @@ import Button from '@mui/material/Button';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import CardHeader from '@mui/material/CardHeader';
+import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import Divider from '@mui/material/Divider';
 import MenuItem from '@mui/material/MenuItem';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import api from '../lib/api';
+import { trackFor } from '../lib/workflow';
 
 // ── Types ──────────────────────────────────────────────────────────────────
+
+interface SourceTitleBasic {
+  title_no: string;
+  area_sqm: string | null;
+  geometry: GeoJSON.Polygon | null;
+}
 
 interface ApplicationBasic {
   id: string;
@@ -28,6 +36,7 @@ interface ApplicationBasic {
   status: string;
   reference_no: string | null;
   applicant: { full_name: string; region: string };
+  source_title: SourceTitleBasic | null;
 }
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -39,6 +48,7 @@ const TYPE_LABELS: Record<string, string> = {
   STATE_LAND: 'State Land',
   PARTITION: 'Partition',
   MORTGAGE: 'Mortgage',
+  MORTGAGE_RELEASE: 'Mortgage Release',
   TRANSFORMATION: 'Transformation',
 };
 
@@ -49,27 +59,72 @@ const SCALES = ['1:500', '1:1 000', '1:2 500', '1:5 000', '1:10 000', '1:25 000'
 const DEFAULT_CENTER: [number, number] = [4.154, 9.243];
 const DEFAULT_ZOOM = 13;
 
-// ── Draw control (inner component — must live inside MapContainer) ──────────
+// ── Geodesic helpers ────────────────────────────────────────────────────────
 
-interface DrawControlProps {
-  onPolygonDrawn: (coords: number[][][]) => void;
+const EARTH_RADIUS = 6378137;
+const toRad = (deg: number) => (deg * Math.PI) / 180;
+
+/** Geodesic area of a GeoJSON linear ring ([lng, lat] positions) in m². */
+function ringAreaSqm(ring: number[][]): number {
+  if (ring.length < 3) return 0;
+  let total = 0;
+  for (let i = 0; i < ring.length; i++) {
+    const p1 = ring[i]!;
+    const p2 = ring[(i + 1) % ring.length]!;
+    total +=
+      (toRad(p2[0]!) - toRad(p1[0]!)) * (2 + Math.sin(toRad(p1[1]!)) + Math.sin(toRad(p2[1]!)));
+  }
+  return Math.abs((total * EARTH_RADIUS * EARTH_RADIUS) / 2);
 }
 
-function DrawControl({ onPolygonDrawn }: DrawControlProps) {
+/** Ray-casting point-in-polygon test for a [lng, lat] point against a ring. */
+function pointInRing(point: number[], ring: number[][]): boolean {
+  const [x, y] = [point[0]!, point[1]!];
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const xi = ring[i]![0]!;
+    const yi = ring[i]![1]!;
+    const xj = ring[j]![0]!;
+    const yj = ring[j]![1]!;
+    const intersect =
+      yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi;
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+/** Quick client-side hint: every vertex of the child ring inside the mother ring.
+ *  (The server runs the authoritative PostGIS ST_Within check.) */
+function verticesInsideMother(child: number[][][], mother: GeoJSON.Polygon): boolean {
+  const motherRing = mother.coordinates[0];
+  if (!motherRing) return true;
+  const childRing = child[0] ?? [];
+  return childRing.every((v) => pointInRing(v, motherRing as number[][]));
+}
+
+// ── Map sub-components (must live inside MapContainer) ─────────────────────
+
+interface DrawControlProps {
+  drawnItemsRef: React.MutableRefObject<L.FeatureGroup | null>;
+  onPolygonChange: (coords: number[][][] | null) => void;
+}
+
+function DrawControl({ drawnItemsRef, onPolygonChange }: DrawControlProps) {
   const map = useMap();
-  // Keep a stable ref to the callback so the effect dependency stays stable
-  const callbackRef = useRef(onPolygonDrawn);
-  useEffect(() => { callbackRef.current = onPolygonDrawn; }, [onPolygonDrawn]);
+  const callbackRef = useRef(onPolygonChange);
+  useEffect(() => { callbackRef.current = onPolygonChange; }, [onPolygonChange]);
 
   useEffect(() => {
     const drawnItems = new L.FeatureGroup();
     map.addLayer(drawnItems);
+    drawnItemsRef.current = drawnItems;
 
     const drawControl = new L.Control.Draw({
       draw: {
         polygon: {
           shapeOptions: { color: '#1976d2', fillOpacity: 0.2 },
           showArea: true,
+          allowIntersection: false,
         },
         polyline: false,
         rectangle: false,
@@ -77,32 +132,54 @@ function DrawControl({ onPolygonDrawn }: DrawControlProps) {
         circlemarker: false,
         marker: false,
       },
+      // Vertex editing: drag any vertex of the drawn polygon, then Save
       edit: { featureGroup: drawnItems },
     });
     map.addControl(drawControl);
 
+    const emitCurrent = () => {
+      let coords: number[][][] | null = null;
+      drawnItems.eachLayer((layer) => {
+        if (layer instanceof L.Polygon) {
+          const geojson = layer.toGeoJSON();
+          coords = (geojson.geometry as { coordinates: number[][][] }).coordinates;
+        }
+      });
+      callbackRef.current(coords);
+    };
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const handleCreated = (e: any) => {
       drawnItems.clearLayers();
-      const layer = e.layer as L.Layer;
-      drawnItems.addLayer(layer);
-      if (layer instanceof L.Polygon) {
-        const geojson = layer.toGeoJSON();
-        callbackRef.current(
-          (geojson.geometry as { coordinates: number[][][] }).coordinates,
-        );
-      }
+      drawnItems.addLayer(e.layer as L.Layer);
+      emitCurrent();
     };
 
     map.on('draw:created', handleCreated);
+    map.on('draw:edited', emitCurrent);
+    map.on('draw:deleted', emitCurrent);
 
     return () => {
       map.off('draw:created', handleCreated);
+      map.off('draw:edited', emitCurrent);
+      map.off('draw:deleted', emitCurrent);
       map.removeControl(drawControl);
       map.removeLayer(drawnItems);
+      drawnItemsRef.current = null;
     };
-  }, [map]);
+  }, [map, drawnItemsRef]);
 
+  return null;
+}
+
+// Fit the view around the mother parcel when it exists
+function FitToGeometry({ geometry }: { geometry: GeoJSON.Polygon | null }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!geometry) return;
+    const layer = L.geoJSON(geometry);
+    map.fitBounds(layer.getBounds(), { padding: [40, 40] });
+  }, [map, geometry]);
   return null;
 }
 
@@ -115,6 +192,11 @@ export default function SurveyorDetail() {
 
   // Spatial state
   const [coordinates, setCoordinates] = useState<number[][][] | null>(null);
+  const drawnItemsRef = useRef<L.FeatureGroup | null>(null);
+
+  // GPS coordinate table entry (one "lat, lng" pair per line)
+  const [gpsText, setGpsText] = useState('');
+  const [gpsError, setGpsError] = useState<string | null>(null);
 
   // Report fields
   const [scale, setScale] = useState('');
@@ -136,15 +218,76 @@ export default function SurveyorDetail() {
     enabled: !!id,
   });
 
-  const handlePolygonDrawn = useCallback((coords: number[][][]) => {
+  const handlePolygonChange = useCallback((coords: number[][][] | null) => {
     setCoordinates(coords);
   }, []);
+
+  const isCarveOut = application ? trackFor(application.type) === 'CARVE_OUT' : false;
+  const motherGeometry = application?.source_title?.geometry ?? null;
+
+  // Live geodesic area of the drawn polygon
+  const drawnAreaSqm = useMemo(
+    () => (coordinates?.[0] ? ringAreaSqm(coordinates[0]) : null),
+    [coordinates],
+  );
+
+  // Client-side containment hint for carve-outs (server check is authoritative)
+  const outsideMother = useMemo(
+    () =>
+      isCarveOut && coordinates && motherGeometry
+        ? !verticesInsideMother(coordinates, motherGeometry)
+        : false,
+    [isCarveOut, coordinates, motherGeometry],
+  );
+
+  // Plot a polygon from typed GPS coordinates onto the map
+  function plotGpsCoordinates() {
+    setGpsError(null);
+    const lines = gpsText
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean);
+    if (lines.length < 3) {
+      setGpsError('Enter at least 3 vertices — one "latitude, longitude" pair per line.');
+      return;
+    }
+
+    const latlngs: [number, number][] = [];
+    for (const [idx, line] of lines.entries()) {
+      const parts = line.split(/[,;\s]+/).filter(Boolean).map(Number);
+      if (parts.length < 2 || parts.some((n) => Number.isNaN(n))) {
+        setGpsError(`Line ${idx + 1} is not a valid "latitude, longitude" pair: "${line}"`);
+        return;
+      }
+      const [lat, lng] = [parts[0]!, parts[1]!];
+      if (Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+        setGpsError(`Line ${idx + 1}: latitude must be within ±90 and longitude within ±180.`);
+        return;
+      }
+      latlngs.push([lat, lng]);
+    }
+
+    const drawnItems = drawnItemsRef.current;
+    if (!drawnItems) return;
+    drawnItems.clearLayers();
+    const polygon = L.polygon(latlngs, { color: '#1976d2', fillOpacity: 0.2 });
+    drawnItems.addLayer(polygon);
+
+    const geojson = polygon.toGeoJSON();
+    setCoordinates((geojson.geometry as { coordinates: number[][][] }).coordinates);
+  }
 
   async function handleSubmit() {
     setError(null);
 
     if (!coordinates) {
-      setError('Please draw the parcel boundary on the map before submitting.');
+      setError('Please draw the parcel boundary on the map (or plot GPS coordinates) before submitting.');
+      return;
+    }
+    if (outsideMother) {
+      setError(
+        'The drawn parcel extends beyond the mother title boundary. The child parcel must lie entirely inside the blue mother polygon.',
+      );
       return;
     }
     if (!scale) {
@@ -195,7 +338,6 @@ export default function SurveyorDetail() {
       });
 
       void queryClient.invalidateQueries({ queryKey: ['applications'] });
-      void queryClient.invalidateQueries({ queryKey: ['applications', 'published'] });
       setSuccess(true);
     } catch (err: unknown) {
       const msg = axios.isAxiosError(err)
@@ -233,7 +375,8 @@ export default function SurveyorDetail() {
     return (
       <Box sx={{ p: 4, maxWidth: 600, mx: 'auto' }}>
         <Alert severity="success" sx={{ mb: 2 }}>
-          Survey submitted successfully. The application is now in <strong>SURVEYED</strong> status.
+          Survey submitted successfully. The application is now in <strong>SURVEYED</strong> status
+          {isCarveOut ? ' and returns to the Conservateur Foncier for clearance.' : '.'}
         </Alert>
         <Button variant="contained" onClick={() => navigate('/survey')}>
           Back to Survey Queue
@@ -241,6 +384,10 @@ export default function SurveyorDetail() {
       </Box>
     );
   }
+
+  const motherArea = application.source_title?.area_sqm
+    ? Number(application.source_title.area_sqm)
+    : null;
 
   // ── Render ───────────────────────────────────────────────────────────────
 
@@ -264,11 +411,38 @@ export default function SurveyorDetail() {
             {application.applicant.full_name}
           </Typography>
         </Box>
+        {isCarveOut && (
+          <Chip
+            color="warning"
+            label={`Carve-out from ${application.source_title?.title_no ?? 'mother title'}`}
+            sx={{ fontWeight: 700 }}
+          />
+        )}
       </Box>
 
       {error && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
           {error}
+        </Alert>
+      )}
+
+      {/* Carve-out guidance */}
+      {isCarveOut && (
+        <Alert severity={motherGeometry ? 'info' : 'error'} sx={{ mb: 2 }}>
+          {motherGeometry ? (
+            <>
+              The <strong>mother parcel</strong> (title {application.source_title?.title_no},{' '}
+              {motherArea ? `${motherArea.toLocaleString()} m²` : 'area on file'}) is shown in{' '}
+              <strong style={{ color: '#b45309' }}>amber</strong> on the map. Draw the child parcel{' '}
+              <strong>entirely inside</strong> that boundary — the server rejects any polygon that
+              crosses it.
+            </>
+          ) : (
+            <>
+              The mother title has no registered geometry on file — the carve-out cannot be
+              validated spatially. Contact the Conservation Foncière before proceeding.
+            </>
+          )}
         </Alert>
       )}
 
@@ -278,13 +452,15 @@ export default function SurveyorDetail() {
           title="Parcel Boundary"
           subheader={
             coordinates
-              ? `Polygon captured (${coordinates[0]?.length ?? 0} vertices)`
-              : 'Use the polygon tool in the top-left of the map to draw the parcel boundary'
+              ? `Polygon captured (${(coordinates[0]?.length ?? 0)} vertices · ${
+                  drawnAreaSqm ? `${Math.round(drawnAreaSqm).toLocaleString()} m²` : '—'
+                })${outsideMother ? ' — OUTSIDE MOTHER BOUNDARY' : ''}`
+              : 'Use the polygon tool (top-left) to draw, the edit tool to drag vertices, or plot typed GPS coordinates below'
           }
           titleTypographyProps={{ variant: 'subtitle1', fontWeight: 700 }}
           subheaderTypographyProps={{
             variant: 'caption',
-            color: coordinates ? 'success.main' : 'text.secondary',
+            color: outsideMother ? 'error' : coordinates ? 'success.main' : 'text.secondary',
           }}
         />
         <Divider />
@@ -294,13 +470,74 @@ export default function SurveyorDetail() {
             zoom={DEFAULT_ZOOM}
             style={{ height: '100%', width: '100%' }}
           >
-            <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            />
-            <DrawControl onPolygonDrawn={handlePolygonDrawn} />
+            <LayersControl position="topright">
+              <LayersControl.BaseLayer checked name="Street Map">
+                <TileLayer
+                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                />
+              </LayersControl.BaseLayer>
+              <LayersControl.BaseLayer name="Satellite Imagery">
+                <TileLayer
+                  attribution="Tiles &copy; Esri — Source: Esri, Maxar, Earthstar Geographics"
+                  url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                />
+              </LayersControl.BaseLayer>
+            </LayersControl>
+
+            {/* Mother parcel reference layer (locked — not editable) */}
+            {motherGeometry && (
+              <GeoJSON
+                data={motherGeometry}
+                style={{ color: '#b45309', weight: 3, dashArray: '6 4', fillOpacity: 0.06 }}
+              />
+            )}
+            <FitToGeometry geometry={motherGeometry} />
+            <DrawControl drawnItemsRef={drawnItemsRef} onPolygonChange={handlePolygonChange} />
           </MapContainer>
         </Box>
+      </Card>
+
+      {/* Area comparison for carve-outs */}
+      {isCarveOut && drawnAreaSqm !== null && motherArea !== null && (
+        <Alert
+          severity={outsideMother || drawnAreaSqm >= motherArea ? 'warning' : 'success'}
+          sx={{ mb: 2 }}
+        >
+          Child parcel ≈ {Math.round(drawnAreaSqm).toLocaleString()} m² of the mother's{' '}
+          {motherArea.toLocaleString()} m² — the mother will retain ≈{' '}
+          {Math.max(0, Math.round(motherArea - drawnAreaSqm)).toLocaleString()} m² after issuance.
+        </Alert>
+      )}
+
+      {/* Typed GPS coordinates (field instrument readings) */}
+      <Card elevation={1} sx={{ mb: 2 }}>
+        <CardHeader
+          title="GPS Coordinate Entry"
+          subheader='Optional — type the vertices read from the field instrument, one "latitude, longitude" pair per line, then plot them.'
+          titleTypographyProps={{ variant: 'subtitle1', fontWeight: 700 }}
+          subheaderTypographyProps={{ variant: 'caption', color: 'text.secondary' }}
+        />
+        <Divider />
+        <CardContent>
+          {gpsError && (
+            <Alert severity="error" sx={{ mb: 2 }} onClose={() => setGpsError(null)}>
+              {gpsError}
+            </Alert>
+          )}
+          <TextField
+            multiline
+            rows={4}
+            fullWidth
+            placeholder={'4.15420, 9.24310\n4.15480, 9.24390\n4.15410, 9.24450'}
+            value={gpsText}
+            onChange={(e) => setGpsText(e.target.value)}
+            slotProps={{ input: { sx: { fontFamily: '"IBM Plex Mono", monospace' } } }}
+          />
+          <Button variant="outlined" sx={{ mt: 1.5 }} onClick={plotGpsCoordinates}>
+            Plot Coordinates on Map
+          </Button>
+        </CardContent>
       </Card>
 
       {/* Survey Report Details */}
@@ -425,7 +662,7 @@ export default function SurveyorDetail() {
         <Button
           variant="contained"
           size="large"
-          disabled={isSubmitting}
+          disabled={isSubmitting || (isCarveOut && !motherGeometry)}
           onClick={() => void handleSubmit()}
         >
           {isSubmitting ? 'Submitting Survey…' : 'Submit Survey'}

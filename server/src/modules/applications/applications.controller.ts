@@ -1,6 +1,9 @@
+import path from 'path';
+import fs from 'fs';
 import { Request, Response } from 'express';
 import { prisma } from '../../db/prisma';
 import type { Prisma } from '../../generated/prisma/client';
+import type { AppType } from '../../generated/prisma/enums';
 import {
   CreateApplicationSchema,
   SubmitApplicationSchema,
@@ -10,6 +13,11 @@ import {
   checkTransition,
   requiredDocTypes,
   requiresOppositionWindow,
+  trackFor,
+  SOURCE_TITLE_TYPES,
+  DIRECT_TYPES,
+  CARVE_OUT_TYPES,
+  FULL_TYPES,
 } from './workflow';
 import { getSystemSettings } from '../../services/settings.service';
 
@@ -33,28 +41,40 @@ async function generateReferenceNo(): Promise<string> {
 function officerQueueFilter(role: string): Prisma.ApplicationWhereInput {
   switch (role) {
     case 'sub_divisional_officer':
+      // Reception desk handles first registrations only — carve-outs and
+      // registrar-direct files never pass through the SDO.
       return {
         status: { in: ['SUBMITTED', 'RECEIPTED', 'PUBLISHED', 'QUERIED', 'REJECTED'] },
+        type: { in: [...FULL_TYPES] as AppType[] },
       };
     case 'surveyor':
-      // Only files awaiting the Procès-Verbal de Bornage
-      return { status: 'PUBLISHED' };
+      // Files awaiting the Procès-Verbal de Bornage: public-notice stage on the
+      // full track, or a registrar-commissioned carve-out survey
+      return { status: { in: ['PUBLISHED', 'SURVEY_ORDERED'] } };
     case 'divisional_delegate':
-      return { status: { in: ['SURVEYED', 'REGIONAL_REVIEW'] } };
+      // Dossier assembly exists only on the full first-registration track
+      return {
+        status: { in: ['SURVEYED', 'REGIONAL_REVIEW'] },
+        type: { in: [...FULL_TYPES] as AppType[] },
+      };
     case 'regional_delegate':
-      return { status: { in: ['REGIONAL_REVIEW', 'OPPOSITION_WINDOW'] } };
+      return {
+        status: { in: ['REGIONAL_REVIEW', 'OPPOSITION_WINDOW'] },
+        type: { in: [...FULL_TYPES] as AppType[] },
+      };
     case 'registrar':
       return {
         OR: [
+          // Full-track stages under the Conservateur's authority
           {
             status: {
-              in: ['REGIONAL_REVIEW', 'OPPOSITION_WINDOW', 'CLEARED', 'TITLE_ISSUED'],
+              in: ['REGIONAL_REVIEW', 'OPPOSITION_WINDOW', 'CLEARED', 'TITLE_ISSUED', 'COMPLETED'],
             },
           },
-          // Notarial fast-track files land on the Conservateur's desk at receipt
+          // Registrar-led tracks land directly on the Conservateur's desk
           {
-            status: 'RECEIPTED',
-            type: { in: ['TOTAL_ALIENATION', 'MORTGAGE'] },
+            status: { in: ['SUBMITTED', 'SURVEY_ORDERED', 'SURVEYED', 'QUERIED'] },
+            type: { in: [...CARVE_OUT_TYPES, ...DIRECT_TYPES] as AppType[] },
           },
         ],
       };
@@ -66,14 +86,17 @@ function officerQueueFilter(role: string): Prisma.ApplicationWhereInput {
 
 // Maps new_status → a human-readable step label stored in the Approval record
 const TRANSITION_STEP: Partial<Record<string, string>> = {
+  SUBMITTED: 'File Re-opened',
   RECEIPTED: 'Receipt Acknowledgement',
   PUBLISHED: 'Initial Review',
   BOARD_SCHEDULED: 'Board Scheduling',
+  SURVEY_ORDERED: 'Survey Commissioned',
   SURVEYED: 'Survey Complete',
   REGIONAL_REVIEW: 'Regional Review',
   OPPOSITION_WINDOW: 'Opposition Window',
   CLEARED: 'Clearance',
   TITLE_ISSUED: 'Title Issuance',
+  COMPLETED: 'Registration Executed',
   QUERIED: 'Query Raised',
   REJECTED: 'Rejection',
 };
@@ -86,12 +109,53 @@ export async function createApplication(req: Request, res: Response): Promise<vo
     return;
   }
 
-  const { type, parcel_id, applicant, land } = parse.data;
+  const { type, parcel_id, source_title_no, applicant, land, mortgage } = parse.data;
+
+  // Types that operate on an existing title (alienations, partition, mortgage,
+  // mortgage release) must be anchored to a VALID title in the register.
+  let sourceTitleId: string | undefined;
+  let sourceParcelId: string | undefined;
+  if (SOURCE_TITLE_TYPES.has(type)) {
+    if (!source_title_no) {
+      res.status(400).json({
+        message: 'This application type requires the existing Land Title Number it operates on.',
+      });
+      return;
+    }
+    const sourceTitle = await prisma.title.findUnique({
+      where: { title_no: source_title_no },
+      select: { id: true, status: true, parcel_id: true },
+    });
+    if (!sourceTitle) {
+      res.status(404).json({
+        message: `No land title found with number ${source_title_no}. Check the number on the Titre Foncier.`,
+      });
+      return;
+    }
+    if (sourceTitle.status !== 'VALID') {
+      res.status(409).json({
+        message: `Title ${source_title_no} is not VALID (status: ${sourceTitle.status}) and cannot be operated on.`,
+      });
+      return;
+    }
+    sourceTitleId = sourceTitle.id;
+    sourceParcelId = sourceTitle.parcel_id;
+  }
+
+  // A mortgage inscription needs the creditor being secured
+  if (type === 'MORTGAGE' && !mortgage?.creditor?.trim()) {
+    res.status(400).json({
+      message: 'A mortgage application must name the creditor (bank / lender) being secured.',
+    });
+    return;
+  }
 
   // When the wizard supplies land details, create the Parcel and link it. An
   // explicit parcel_id (e.g. for alienation of an existing parcel) takes priority.
-  let resolvedParcelId = parcel_id;
-  if (!resolvedParcelId && land) {
+  // Registrar-direct types operate on the source title's existing parcel — no
+  // new parcel is ever created for them.
+  let resolvedParcelId = DIRECT_TYPES.has(type) ? sourceParcelId : parcel_id;
+  if (!resolvedParcelId && !DIRECT_TYPES.has(type) && land) {
     const parcel = await prisma.parcel.create({
       data: {
         division: land.division,
@@ -118,6 +182,9 @@ export async function createApplication(req: Request, res: Response): Promise<vo
       type,
       applicant_id: req.user!.id,
       ...(resolvedParcelId ? { parcel_id: resolvedParcelId } : {}),
+      ...(sourceTitleId ? { source_title_id: sourceTitleId } : {}),
+      ...(mortgage?.creditor?.trim() ? { mortgage_creditor: mortgage.creditor.trim() } : {}),
+      ...(mortgage?.amount !== undefined ? { mortgage_amount: mortgage.amount } : {}),
       ...(applicant?.father ? { applicant_father: applicant.father } : {}),
       ...(applicant?.mother ? { applicant_mother: applicant.mother } : {}),
       ...(applicant?.nationality ? { applicant_nationality: applicant.nationality } : {}),
@@ -352,6 +419,24 @@ export async function getApplication(req: Request, res: Response): Promise<void>
           },
         },
       },
+      // The mother/source title an alienation, partition, mortgage or release
+      // operates on — with the data the Registrar and Surveyor need to act
+      source_title: {
+        select: {
+          id: true,
+          title_no: true,
+          volume: true,
+          folio: true,
+          status: true,
+          division: true,
+          parcel_id: true,
+          owners: { where: { is_current: true }, select: { full_name: true } },
+          encumbrances: {
+            where: { status: 'ACTIVE' },
+            select: { id: true, kind: true, party: true, recorded_at: true },
+          },
+        },
+      },
     },
   });
 
@@ -361,10 +446,109 @@ export async function getApplication(req: Request, res: Response): Promise<void>
     return;
   }
 
-  res.json(application);
+  // Attach the mother parcel geometry (GeoJSON) so the surveyor can carve the
+  // child parcel from the mother polygon on the map
+  let sourceGeometry: unknown = null;
+  let sourceArea: string | null = null;
+  if (application.source_title?.parcel_id) {
+    const rows = await prisma.$queryRaw<{ geojson: string | null; area_sqm: string | null }[]>`
+      SELECT ST_AsGeoJSON(geom) AS geojson, area_sqm::text AS area_sqm
+      FROM "Parcel" WHERE id = ${application.source_title.parcel_id}::uuid
+    `;
+    sourceGeometry = rows[0]?.geojson ? JSON.parse(rows[0].geojson) : null;
+    sourceArea = rows[0]?.area_sqm ?? null;
+  }
+
+  res.json({
+    ...application,
+    source_title: application.source_title
+      ? { ...application.source_title, geometry: sourceGeometry, area_sqm: sourceArea }
+      : null,
+  });
 }
 
-// GET /applications/:id/track  — public, resolves by reference_no
+// GET /applications/mine — the citizen's own applications with the full
+// decision history (query/rejection reasons included) and any issued title
+export async function myApplications(req: Request, res: Response): Promise<void> {
+  const applications = await prisma.application.findMany({
+    where: { applicant_id: req.user!.id },
+    include: {
+      approvals: {
+        orderBy: { signed_at: 'asc' },
+        select: { step: true, decision: true, role: true, signed_at: true },
+      },
+      parcel: {
+        select: {
+          titles: {
+            orderBy: { issued_at: 'desc' },
+            take: 1,
+            select: { id: true, title_no: true, certificate_pdf_path: true },
+          },
+        },
+      },
+      source_title: { select: { title_no: true } },
+    },
+    orderBy: { created_at: 'desc' },
+  });
+
+  res.json(
+    applications.map((a) => ({
+      id: a.id,
+      type: a.type,
+      status: a.status,
+      reference_no: a.reference_no,
+      created_at: a.created_at,
+      updated_at: a.updated_at,
+      source_title_no: a.source_title?.title_no ?? null,
+      approvals: a.approvals,
+      issued_title: a.parcel?.titles?.[0]
+        ? {
+            id: a.parcel.titles[0].id,
+            title_no: a.parcel.titles[0].title_no,
+            has_certificate: !!a.parcel.titles[0].certificate_pdf_path,
+          }
+        : null,
+    })),
+  );
+}
+
+// GET /applications/:id/certificate — the applicant downloads their own issued
+// Titre Foncier PDF, without needing officer registry permissions
+export async function downloadOwnCertificate(req: Request, res: Response): Promise<void> {
+  const id = req.params['id'] as string;
+
+  const application = await prisma.application.findUnique({
+    where: { id },
+    include: {
+      parcel: {
+        select: {
+          titles: {
+            orderBy: { issued_at: 'desc' },
+            take: 1,
+            select: { title_no: true, certificate_pdf_path: true },
+          },
+        },
+      },
+    },
+  });
+
+  if (!application || application.applicant_id !== req.user!.id) {
+    res.status(404).json({ message: 'Application not found' });
+    return;
+  }
+
+  const title = application.parcel?.titles?.[0];
+  if (!title?.certificate_pdf_path || !fs.existsSync(title.certificate_pdf_path)) {
+    res.status(404).json({ message: 'No certificate is available for this application yet' });
+    return;
+  }
+
+  res.download(title.certificate_pdf_path, `${path.basename(title.certificate_pdf_path)}`);
+}
+
+// GET /applications/:id/track  — public, resolves by reference_no.
+// Returns the status plus the step timeline (step label + date only — decision
+// notes are private to the applicant and shown in My Applications instead).
 export async function trackApplication(req: Request, res: Response): Promise<void> {
   const id = req.params['id'] as string; // id is actually the reference_no
 
@@ -377,6 +561,10 @@ export async function trackApplication(req: Request, res: Response): Promise<voi
       reference_no: true,
       created_at: true,
       updated_at: true,
+      approvals: {
+        orderBy: { signed_at: 'asc' },
+        select: { step: true, signed_at: true },
+      },
     },
   });
 

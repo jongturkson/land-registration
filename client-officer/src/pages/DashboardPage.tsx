@@ -75,12 +75,18 @@ function getRoleConfig(role: string): RoleConfig {
         title: 'Conservation Foncière',
         subtitle: 'Fako Division · Land Register',
         mandate:
-          'You are the Conservateur Foncier — the final statutory authority. You verify notarial acts on fast-track transfers, open the opposition window on first registrations, clear uncontested files, and enter the parcel in the Livre Foncier to issue the Land Certificate (Titre Foncier).',
+          'You are the Conservateur Foncier — the final statutory authority. Alienations, partitions, mortgages and releases land directly on your desk: you verify the deed and the mother title, commission carve-out surveys, open the opposition window on first registrations, and execute every entry in the Livre Foncier.',
         accentColor: '#b45309',       // amber-gold — highest authority, "last bus stop"
-        // RECEIPTED appears here only for notarial fast-track files —
-        // the server scopes the queue so full-track receipts stay with the SDO
-        activeStatuses: new Set(['RECEIPTED', 'REGIONAL_REVIEW', 'OPPOSITION_WINDOW', 'CLEARED']),
-        contextStatuses: new Set(['TITLE_ISSUED']),
+        // SUBMITTED/SURVEYED appear here only for registrar-led tracks —
+        // the server scopes the queue so full-track files stay with the SDO
+        activeStatuses: new Set([
+          'SUBMITTED',
+          'SURVEYED',
+          'REGIONAL_REVIEW',
+          'OPPOSITION_WINDOW',
+          'CLEARED',
+        ]),
+        contextStatuses: new Set(['SURVEY_ORDERED', 'TITLE_ISSUED', 'COMPLETED']),
         buttonLabel: 'Open File',
       };
 
@@ -106,6 +112,7 @@ const TYPE_LABELS: Record<string, string> = {
   STATE_LAND: 'State Land',
   PARTITION: 'Partition',
   MORTGAGE: 'Mortgage',
+  MORTGAGE_RELEASE: 'Mortgage Release',
   TRANSFORMATION: 'Transformation',
 };
 
@@ -115,11 +122,13 @@ const STATUS_LABELS: Record<string, string> = {
   RECEIPTED: 'Receipted',
   PUBLISHED: 'Public Notice',
   BOARD_SCHEDULED: 'Board Scheduled',
+  SURVEY_ORDERED: 'Survey Ordered',
   SURVEYED: 'Surveyed',
   REGIONAL_REVIEW: 'Regional Review',
   OPPOSITION_WINDOW: 'Opposition Window',
   CLEARED: 'Cleared',
   TITLE_ISSUED: 'Title Issued',
+  COMPLETED: 'Registered',
   QUERIED: 'Queried',
   REJECTED: 'Rejected',
 };
@@ -131,11 +140,13 @@ function statusColor(status: string): ChipColor {
     case 'SUBMITTED': return 'info';
     case 'RECEIPTED': return 'primary';
     case 'PUBLISHED': return 'warning';
+    case 'SURVEY_ORDERED': return 'warning';
     case 'SURVEYED': return 'secondary';
     case 'REGIONAL_REVIEW': return 'info';
     case 'OPPOSITION_WINDOW': return 'warning';
     case 'CLEARED': return 'primary';
     case 'TITLE_ISSUED': return 'success';
+    case 'COMPLETED': return 'success';
     case 'QUERIED': return 'warning';
     case 'REJECTED': return 'error';
     default: return 'default';

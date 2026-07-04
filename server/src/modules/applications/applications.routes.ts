@@ -10,10 +10,13 @@ import {
   listApplications,
   getApplication,
   trackApplication,
+  myApplications,
+  downloadOwnCertificate,
 } from './applications.controller';
 import { upload, uploadDocument, downloadDocument } from './documents.controller';
 import { submitSurvey } from './survey.controller';
 import { fileDispute } from './disputes.controller';
+import { executeApplication } from '../titles/execution.controller';
 
 const router = Router();
 
@@ -51,9 +54,13 @@ router.post('/:reference_no/dispute', fileDispute);
 
 // ── Citizen routes ─────────────────────────────────────────────────────────
 
+// Static path before the /:id wildcard
+router.get('/mine', authMiddleware, myApplications);
+
 router.post('/', authMiddleware, createApplication);
 router.post('/:id/documents', authMiddleware, handleMulterUpload, uploadDocument);
 router.post('/:id/submit', authMiddleware, submitApplication);
+router.get('/:id/certificate', authMiddleware, downloadOwnCertificate);
 
 // ── Surveyor routes ────────────────────────────────────────────────────────
 
@@ -72,6 +79,14 @@ router.post(
   authMiddleware,
   authorize('application', 'review_regional'),
   regionalApprove,
+);
+// Registrar finalises a CLEARED registrar-direct application (mutation totale,
+// hypothèque, mainlevée) by writing the corresponding Livre Foncier entry
+router.post(
+  '/:id/execute',
+  authMiddleware,
+  authorize('application', 'execute'),
+  executeApplication,
 );
 router.get('/', authMiddleware, authorize('application', 'read'), listApplications);
 router.get('/:id', authMiddleware, authorize('application', 'read'), getApplication);

@@ -7,6 +7,7 @@ export const AppTypeEnum = z.enum([
   'STATE_LAND',
   'PARTITION',
   'MORTGAGE',
+  'MORTGAGE_RELEASE',
   'TRANSFORMATION',
 ]);
 
@@ -16,11 +17,13 @@ export const AppStatusEnum = z.enum([
   'RECEIPTED',
   'PUBLISHED',
   'BOARD_SCHEDULED',
+  'SURVEY_ORDERED',
   'SURVEYED',
   'REGIONAL_REVIEW',
   'OPPOSITION_WINDOW',
   'CLEARED',
   'TITLE_ISSUED',
+  'COMPLETED',
   'QUERIED',
   'REJECTED',
 ]);
@@ -59,14 +62,26 @@ const LandDetailsSchema = z
   })
   .optional();
 
+// Mortgage-specific data (Hypothèque / Mainlevée d'hypothèque)
+const MortgageDetailsSchema = z
+  .object({
+    creditor: z.string().optional(),
+    amount: z.coerce.number().int().positive().optional(),
+  })
+  .optional();
+
 // Used by POST /applications — type is required, parcel is optional for drafts.
 // The public wizard additionally sends applicant civil status and land details,
-// from which a Parcel is created.
+// from which a Parcel is created. Types that operate on an existing title
+// (alienations, partition, mortgage, mortgage release) must reference it via
+// source_title_no — validated against the register in the controller.
 export const CreateApplicationSchema = z.object({
   type: AppTypeEnum,
   parcel_id: z.string().uuid().optional(),
+  source_title_no: z.string().trim().optional(),
   applicant: ApplicantDetailsSchema,
   land: LandDetailsSchema,
+  mortgage: MortgageDetailsSchema,
 });
 
 // Used by POST /applications/:id/submit — applicant may finalise parcel before submitting

@@ -8,23 +8,23 @@ import {
 import { useWatch } from 'react-hook-form';
 import { type WizardStepProps } from '../../schemas/wizard.schema';
 
-const BASE_DOCS = [
-  {
-    key: 'id_card' as const,
-    label: 'National ID Card',
-    hint: 'Front and back scan or photograph of your valid ID card.',
-  },
-  {
-    key: 'site_plan' as const,
-    label: 'Site / Survey Plan',
-    hint: 'Certified copy of the existing or proposed survey plan.',
-  },
-  {
-    key: 'attestation' as const,
-    label: 'Attestation of Ownership',
-    hint: 'Village chief attestation or equivalent proof of occupation.',
-  },
-] as const;
+const ID_CARD_DOC = {
+  key: 'id_card' as const,
+  label: 'National ID Card',
+  hint: 'Front and back scan or photograph of your valid ID card.',
+};
+
+const SITE_PLAN_DOC = {
+  key: 'site_plan' as const,
+  label: 'Site / Survey Plan',
+  hint: 'Certified copy of the existing or proposed survey plan.',
+};
+
+const ATTESTATION_DOC = {
+  key: 'attestation' as const,
+  label: 'Attestation of Ownership',
+  hint: 'Village chief attestation or equivalent proof of occupation.',
+};
 
 // Statutory extras per application type — required before submission
 const JUDGMENT_DOC = {
@@ -39,32 +39,57 @@ const NOTARIAL_ACT_DOC = {
   hint: 'The notarized deed of sale, transfer or mortgage. Private agreements have no legal effect on titled land.',
 };
 
-type DocKey =
-  | (typeof BASE_DOCS)[number]['key']
-  | typeof JUDGMENT_DOC.key
-  | typeof NOTARIAL_ACT_DOC.key;
+const RELEASE_DEED_DOC = {
+  key: 'release_deed' as const,
+  label: "Creditor's Release Deed (Mainlevée Notariée)",
+  hint: "The creditor's notarized deed confirming the secured debt is settled and consenting to the release of the mortgage.",
+};
 
+type DocKey =
+  | typeof ID_CARD_DOC.key
+  | typeof SITE_PLAN_DOC.key
+  | typeof ATTESTATION_DOC.key
+  | typeof JUDGMENT_DOC.key
+  | typeof NOTARIAL_ACT_DOC.key
+  | typeof RELEASE_DEED_DOC.key;
+
+// Mirrors server/src/modules/applications/workflow.ts requiredDocTypes():
+// registrar-direct types operate on an already-surveyed parcel, so no site
+// plan or attestation is demanded for them.
 function docsForType(type: string | undefined) {
-  if (type === 'PARTITION') return [...BASE_DOCS, JUDGMENT_DOC];
-  if (type === 'TOTAL_ALIENATION' || type === 'PARTIAL_ALIENATION' || type === 'MORTGAGE') {
-    return [...BASE_DOCS, NOTARIAL_ACT_DOC];
+  switch (type) {
+    case 'PARTITION':
+      return [ID_CARD_DOC, SITE_PLAN_DOC, ATTESTATION_DOC, JUDGMENT_DOC];
+    case 'PARTIAL_ALIENATION':
+      return [ID_CARD_DOC, SITE_PLAN_DOC, ATTESTATION_DOC, NOTARIAL_ACT_DOC];
+    case 'TOTAL_ALIENATION':
+    case 'MORTGAGE':
+      return [ID_CARD_DOC, NOTARIAL_ACT_DOC];
+    case 'MORTGAGE_RELEASE':
+      return [ID_CARD_DOC, RELEASE_DEED_DOC];
+    default:
+      return [ID_CARD_DOC, SITE_PLAN_DOC, ATTESTATION_DOC];
   }
-  return [...BASE_DOCS];
 }
 
 function FileField({
   label,
   hint,
   fieldKey,
+  initialName,
   onFile,
 }: {
   label: string;
   hint: string;
   fieldKey: string;
+  initialName: string | null;
   onFile: (file: File | null) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [filename, setFilename] = useState<string | null>(null);
+  // Seed from the persisted form value so a chosen file still shows when the
+  // user navigates back to this step. The field remounts on step change and
+  // would otherwise appear empty even though the File is still in form state.
+  const [filename, setFilename] = useState<string | null>(initialName);
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0] ?? null;
@@ -126,6 +151,9 @@ export default function StepDocuments({ form }: WizardStepProps) {
   const { setValue, control } = form;
   const otherInputRef = useRef<HTMLInputElement>(null);
   const others = (useWatch({ control, name: 'documents.others' }) as File[] | undefined) ?? [];
+  const docValues = useWatch({ control, name: 'documents' }) as
+    | Record<string, unknown>
+    | undefined;
   const appType = useWatch({ control, name: 'type' }) as string | undefined;
   const requiredDocs = docsForType(appType);
 
@@ -156,25 +184,31 @@ export default function StepDocuments({ form }: WizardStepProps) {
         Upload scans or photographs of the required documents. Accepted formats: PDF, JPG, PNG.
       </Typography>
       <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 3 }}>
-        ID Card and Site Plan are required before you can submit. Attestation is optional.
+        {appType === 'TOTAL_ALIENATION' || appType === 'MORTGAGE'
+          ? 'ID Card and the Notarial Act are required before you can submit — the parcel is already on the register, so no site plan is needed.'
+          : appType === 'MORTGAGE_RELEASE'
+            ? "ID Card and the creditor's Release Deed are required before you can submit."
+            : 'ID Card and Site Plan are required before you can submit. Attestation is optional.'}
         {appType === 'PARTITION' &&
           ' Partition applications also require the court judgment or inheritance certificate.'}
-        {(appType === 'TOTAL_ALIENATION' ||
-          appType === 'PARTIAL_ALIENATION' ||
-          appType === 'MORTGAGE') &&
-          ' This application type also requires the notarial act (acte notarié).'}
+        {appType === 'PARTIAL_ALIENATION' &&
+          ' Partial alienations also require the notarial act (acte notarié).'}
       </Typography>
 
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {requiredDocs.map(({ key, label, hint }) => (
-          <FileField
-            key={key}
-            fieldKey={key}
-            label={label}
-            hint={hint}
-            onFile={(file) => handleFile(key, file)}
-          />
-        ))}
+        {requiredDocs.map(({ key, label, hint }) => {
+          const existing = docValues?.[key];
+          return (
+            <FileField
+              key={key}
+              fieldKey={key}
+              label={label}
+              hint={hint}
+              initialName={existing instanceof File ? existing.name : null}
+              onFile={(file) => handleFile(key, file)}
+            />
+          );
+        })}
       </Box>
 
       <Divider sx={{ my: 3 }} />

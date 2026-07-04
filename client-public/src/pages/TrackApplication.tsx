@@ -26,6 +26,7 @@ interface TrackedApplication {
   reference_no: string;
   created_at: string;
   updated_at: string;
+  approvals: { step: string; signed_at: string }[];
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -35,13 +36,14 @@ const TYPE_LABELS: Record<string, string> = {
   STATE_LAND: 'State Land Concession',
   PARTITION: 'Property Partition (Partage)',
   MORTGAGE: 'Mortgage Inscription (Hypothèque)',
+  MORTGAGE_RELEASE: 'Mortgage Release (Mainlevée)',
   TRANSFORMATION: 'Transformation',
 };
 
 // ── Statutory track per application type (mirrors the server state machine) ──
 
-const FAST_TRACK_TYPES = new Set(['TOTAL_ALIENATION', 'MORTGAGE']);
-const NO_OPPOSITION_TYPES = new Set(['PARTIAL_ALIENATION', 'PARTITION']);
+const CARVE_OUT_TYPES = new Set(['PARTIAL_ALIENATION', 'PARTITION']);
+const DIRECT_TYPES = new Set(['TOTAL_ALIENATION', 'MORTGAGE', 'MORTGAGE_RELEASE']);
 
 interface JourneyStep {
   status: string;
@@ -61,48 +63,62 @@ const FULL_STEPS: JourneyStep[] = [
 ];
 
 function stepsFor(type: string): JourneyStep[] {
-  if (FAST_TRACK_TYPES.has(type)) {
+  if (DIRECT_TYPES.has(type)) {
     return [
-      { status: 'SUBMITTED', label: 'Submitted', phase: 2 },
-      { status: 'RECEIPTED', label: 'Récépissé Issued', phase: 2 },
-      { status: 'CLEARED', label: 'Notarial Act Verified', phase: 2 },
-      { status: 'TITLE_ISSUED', label: 'Mutation Registered', phase: 2 },
+      { status: 'SUBMITTED', label: 'Submitted to Registrar', phase: 2 },
+      { status: 'CLEARED', label: 'Deed Verified', phase: 2 },
+      { status: 'COMPLETED', label: 'Registered in Livre Foncier', phase: 2 },
     ];
   }
-  if (NO_OPPOSITION_TYPES.has(type)) {
-    return FULL_STEPS.filter((s) => s.status !== 'OPPOSITION_WINDOW');
+  if (CARVE_OUT_TYPES.has(type)) {
+    return [
+      { status: 'SUBMITTED', label: 'Submitted to Registrar', phase: 2 },
+      { status: 'SURVEY_ORDERED', label: 'Survey Commissioned', phase: 1 },
+      { status: 'SURVEYED', label: 'Child Parcel Demarcated', phase: 1 },
+      { status: 'CLEARED', label: 'Cleared', phase: 2 },
+      { status: 'TITLE_ISSUED', label: 'Child Title Issued', phase: 2 },
+    ];
   }
   return FULL_STEPS;
 }
 
 // Citizen-facing guidance: what is happening now and what to expect next
 function nextStepText(type: string, status: string): string {
-  const fast = FAST_TRACK_TYPES.has(type);
+  const direct = DIRECT_TYPES.has(type);
+  const carveOut = CARVE_OUT_TYPES.has(type);
   switch (status) {
     case 'SUBMITTED':
-      return 'Your file is with the Sub-Divisional Office, which will verify it and issue your official receipt (Récépissé). No action is needed from you.';
+      return direct || carveOut
+        ? 'Your file is on the desk of the Land Registrar (Conservateur Foncier), who will verify your deed against the existing title. No action is needed from you.'
+        : 'Your file is with the Sub-Divisional Office, which will verify it and issue your official receipt (Récépissé). No action is needed from you.';
     case 'RECEIPTED':
-      return fast
-        ? 'Your Récépissé has been issued. Your notarial act is being examined by the Land Registrar (Conservateur Foncier) — this type of file skips the public notice phase.'
-        : 'Your Récépissé has been issued. The SDO will now order the public notice and convene the Consultative Commission for the site visit.';
+      return 'Your Récépissé has been issued. The SDO will now order the public notice and convene the Consultative Commission for the site visit.';
     case 'PUBLISHED':
       return 'A public notice about your application has been posted. Next: the Consultative Commission will visit your land and the sworn surveyor will demarcate the boundaries (bornage). Please be available to attend.';
+    case 'SURVEY_ORDERED':
+      return 'The Registrar has verified your deed and commissioned the survey. The sworn surveyor will demarcate your portion inside the mother title boundary — please be available to attend.';
     case 'SURVEYED':
-      return 'Your land has been surveyed. The dossier is being assembled and forwarded to the Regional Delegation for review.';
+      return carveOut
+        ? 'Your portion has been demarcated inside the mother title. The Registrar will now verify the survey and clear the file for your new title.'
+        : 'Your land has been surveyed. The dossier is being assembled and forwarded to the Regional Delegation for review.';
     case 'REGIONAL_REVIEW':
-      return fast || NO_OPPOSITION_TYPES.has(type)
-        ? 'Your dossier is under regional review. Once verified it will be cleared for registration.'
-        : 'Your dossier is under regional review. Once approved, a 30-day public opposition window opens — this is a legal requirement for first registrations.';
+      return 'Your dossier is under regional review. Once approved, a 30-day public opposition window opens — this is a legal requirement for first registrations.';
     case 'OPPOSITION_WINDOW':
       return 'The 30-day opposition window is open. Anyone claiming a right over the land may file an opposition during this period. If none is upheld, your file will be cleared.';
     case 'CLEARED':
-      return 'Your file is cleared. The Land Registrar (Conservateur Foncier) will now enter the parcel in the Land Register and issue your Land Certificate.';
+      return direct
+        ? 'Your deed is verified. The Land Registrar will now execute the entry (transfer, mortgage or release) on the existing title.'
+        : carveOut
+          ? 'Your file is cleared. The Land Registrar will now issue your new title and reduce the mother parcel accordingly.'
+          : 'Your file is cleared. The Land Registrar (Conservateur Foncier) will now enter the parcel in the Land Register and issue your Land Certificate.';
     case 'TITLE_ISSUED':
-      return 'Congratulations — your Land Certificate (Titre Foncier) has been issued. You may collect your copy at the Divisional Registry, Buea.';
+      return 'Congratulations — your Land Certificate (Titre Foncier) has been issued. Sign in and open My Applications to download it, or collect your copy at the Divisional Registry, Buea.';
+    case 'COMPLETED':
+      return 'Done — the entry has been executed on the title in the Land Register. The updated title can be confirmed at any time through the public verification portal.';
     case 'QUERIED':
-      return 'An officer has raised a query on your file. Please contact the Divisional Registry, Buea, with your Récépissé to resolve it.';
+      return 'An officer has raised a query on your file. Sign in and open My Applications to read exactly what needs correcting, or contact the Divisional Registry, Buea, with your Récépissé.';
     case 'REJECTED':
-      return 'Your application was rejected. Contact the Divisional Registry, Buea, with your Récépissé to learn the grounds and your options.';
+      return 'Your application was rejected. Sign in and open My Applications to read the grounds, or contact the Divisional Registry, Buea, with your Récépissé.';
     default:
       return '';
   }
@@ -228,9 +244,11 @@ export default function TrackApplication() {
           {!halted && (
             <>
               <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary' }}>
-                {FAST_TRACK_TYPES.has(result.type)
-                  ? 'NOTARIAL FAST-TRACK — REGISTRATION PHASE ONLY'
-                  : 'PHASE I — ESTABLISHING THE GROUND TRUTH · PHASE II — REGISTRATION'}
+                {DIRECT_TYPES.has(result.type)
+                  ? 'REGISTRAR-DIRECT — ENTRY ON THE EXISTING TITLE'
+                  : CARVE_OUT_TYPES.has(result.type)
+                    ? 'REGISTRAR-LED CARVE-OUT (MORCELLEMENT)'
+                    : 'PHASE I — ESTABLISHING THE GROUND TRUTH · PHASE II — REGISTRATION'}
               </Typography>
               <Stepper
                 activeStep={currentIndex === -1 ? 0 : currentIndex}
@@ -258,6 +276,37 @@ export default function TrackApplication() {
           <Alert severity={result.status === 'REJECTED' ? 'error' : halted ? 'warning' : 'info'}>
             {nextStepText(result.type, result.status)}
           </Alert>
+
+          {/* Processing history — the steps already taken by the offices */}
+          {result.approvals.length > 0 && (
+            <>
+              <Divider sx={{ my: 3 }} />
+              <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.5 }}>
+                Processing History
+              </Typography>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                {result.approvals.map((a, i) => (
+                  <Box key={i} sx={{ display: 'flex', gap: 2, alignItems: 'baseline' }}>
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        fontFamily: "'IBM Plex Mono', monospace",
+                        color: 'text.secondary',
+                        minWidth: 96,
+                      }}
+                    >
+                      {new Date(a.signed_at).toLocaleDateString('en-GB', {
+                        day: '2-digit',
+                        month: 'short',
+                        year: 'numeric',
+                      })}
+                    </Typography>
+                    <Typography variant="body2">{a.step}</Typography>
+                  </Box>
+                ))}
+              </Box>
+            </>
+          )}
         </Paper>
       )}
     </Container>

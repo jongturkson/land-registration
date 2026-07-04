@@ -1,11 +1,8 @@
 import { Router } from 'express';
 import { authMiddleware } from '../../middleware/auth';
 import { authorize } from '../../middleware/authorize';
-import { issueTitle, downloadTitleCertificate } from './titles.controller';
+import { issueTitle, downloadTitleCertificate, cancelTitle } from './titles.controller';
 import { listTitles, getTitleDetails } from './registry.controller';
-import { transferTitle } from './mutations.controller';
-import { registerMortgage } from './encumbrance.controller';
-import { subdivideTitle } from './subdivision.controller';
 
 const router = Router();
 
@@ -16,7 +13,10 @@ router.post(
   issueTitle,
 );
 
-// ── Registry consultation ───────────────────────────────────────────────────
+// ── Registry consultation (read-only Livre Foncier view) ────────────────────
+// Direct mutations (transfer / mortgage / subdivision) have been removed:
+// every change to the register must arrive as a citizen application and be
+// executed through the application workflow endpoints.
 
 router.get('/titles', authMiddleware, authorize('title', 'read'), listTitles);
 
@@ -34,27 +34,13 @@ router.get(
   downloadTitleCertificate,
 );
 
-// ── Title mutations (Livre Foncier entries) ─────────────────────────────────
+// ── Ministerial cancellation — the sole remaining direct registry act ───────
 
 router.post(
-  '/titles/:title_no/transfer',
+  '/titles/:title_no/cancel',
   authMiddleware,
-  authorize('title', 'transfer'),
-  transferTitle,
-);
-
-router.post(
-  '/titles/:title_no/mortgage',
-  authMiddleware,
-  authorize('title', 'mortgage'),
-  registerMortgage,
-);
-
-router.post(
-  '/titles/:title_no/subdivide',
-  authMiddleware,
-  authorize('title', 'subdivide'),
-  subdivideTitle,
+  authorize('title', 'cancel'),
+  cancelTitle,
 );
 
 export default router;

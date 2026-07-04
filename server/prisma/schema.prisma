@@ -16,6 +16,7 @@ enum AppType {
   STATE_LAND
   PARTITION
   MORTGAGE
+  MORTGAGE_RELEASE
   TRANSFORMATION
 }
 
@@ -31,11 +32,13 @@ enum AppStatus {
   RECEIPTED
   PUBLISHED
   BOARD_SCHEDULED
+  SURVEY_ORDERED
   SURVEYED
   REGIONAL_REVIEW
   OPPOSITION_WINDOW
   CLEARED
   TITLE_ISSUED
+  COMPLETED
   QUERIED
   REJECTED
 }
@@ -71,6 +74,15 @@ model Application {
   created_at   DateTime  @default(now())
   updated_at   DateTime  @updatedAt
 
+  // Existing (mother/source) title the application operates on — mandatory for
+  // Partial/Total Alienation, Partition, Mortgage and Mortgage Release. The
+  // carve-out and registrar-direct tracks are anchored to this title.
+  source_title_id String? @db.Uuid
+
+  // Mortgage-specific application data (Hypothèque / Mainlevée)
+  mortgage_creditor String?
+  mortgage_amount   Int?
+
   // Applicant civil status (État civil du propriétaire) — captured on the
   // Demande de Titre Foncier and carried onto the issued title's owner record
   applicant_father       String?
@@ -84,6 +96,7 @@ model Application {
 
   applicant      User                  @relation(fields: [applicant_id], references: [id])
   parcel         Parcel?               @relation(fields: [parcel_id], references: [id])
+  source_title   Title?                @relation("SourceTitle", fields: [source_title_id], references: [id])
   documents      ApplicationDocument[]
   survey_reports SurveyReport[]
   approvals      Approval[]
@@ -91,6 +104,7 @@ model Application {
 
   @@index([applicant_id])
   @@index([parcel_id])
+  @@index([source_title_id])
   @@index([status])
 }
 
@@ -167,10 +181,16 @@ model Title {
   status               String    @default("VALID")
   certificate_pdf_path String?
 
-  parcel       Parcel        @relation(fields: [parcel_id], references: [id])
-  issuer       User          @relation("Issuer", fields: [issued_by], references: [id])
-  owners       TitleOwner[]
-  encumbrances Encumbrance[]
+  // Ministerial cancellation (retrait/annulation du titre) — registrar records
+  // the ministerial order reference; the title row is kept, never deleted.
+  cancelled_at     DateTime?
+  cancellation_ref String?
+
+  parcel              Parcel        @relation(fields: [parcel_id], references: [id])
+  issuer              User          @relation("Issuer", fields: [issued_by], references: [id])
+  owners              TitleOwner[]
+  encumbrances        Encumbrance[]
+  source_applications Application[] @relation("SourceTitle")
 
   @@index([parcel_id])
 }

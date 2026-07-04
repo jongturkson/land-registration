@@ -17,6 +17,9 @@ import {
 import axios from 'axios';
 import {
   APP_TYPES,
+  MORTGAGE_TYPES,
+  NEEDS_LAND_TYPES,
+  SOURCE_TITLE_TYPES,
   WizardSchema,
   type AppTypeValue,
   type WizardFormData,
@@ -31,10 +34,13 @@ import api from '../lib/api';
 
 const STEP_LABELS = ['Type', 'Owner', 'Land', 'Documents', 'Review'];
 
+// The land step's requirements depend on the application type (title number,
+// parcel description, creditor…) — trigger the whole nested objects so the
+// schema's conditional rules run.
 const STEP_FIELDS: Record<number, Path<WizardFormData>[]> = {
   0: ['type'],
   1: ['owner.full_name', 'owner.address', 'owner.id_card_no', 'owner.id_delivered_on'],
-  2: ['land.plot_no', 'land.block_no', 'land.subdivision', 'land.division'],
+  2: ['land', 'mortgage'],
   3: [],
 };
 
@@ -76,6 +82,7 @@ export default function ApplyPage() {
         area_main: '',
         area_partition: '',
       },
+      mortgage: { creditor: '', amount: '' },
       documents: {},
       consent: false,
     },
@@ -101,16 +108,23 @@ export default function ApplyPage() {
     attestation: 'ATTESTATION',
     judgment: 'JUDGMENT',
     notarial_act: 'NOTARIAL_ACT',
+    release_deed: 'RELEASE_DEED',
   };
 
   async function onSubmit(data: WizardFormData) {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      // 1. Create draft application — includes applicant civil status + land details,
-      //    from which the backend creates the linked Parcel.
+      // 1. Create draft application — includes applicant civil status, and
+      //    depending on the type: the existing (mother) title number, land
+      //    details (from which the backend creates the linked Parcel) and/or
+      //    mortgage creditor details.
+      const needsLand = NEEDS_LAND_TYPES.has(data.type);
       const createRes = await api.post<{ id: string }>('/applications', {
         type: data.type,
+        ...(SOURCE_TITLE_TYPES.has(data.type) && data.land.title_no?.trim()
+          ? { source_title_no: data.land.title_no.trim() }
+          : {}),
         applicant: {
           father: data.owner.father_name,
           mother: data.owner.mother_name,
@@ -121,27 +135,39 @@ export default function ApplyPage() {
           marital_status: data.owner.marital_status,
           matrimonial_regime: data.owner.matrimonial_regime,
         },
-        land: {
-          plot_no: data.land.plot_no,
-          block_no: data.land.block_no,
-          subdivision: data.land.subdivision,
-          division: data.land.division,
-          situation: data.land.situation,
-          nature: data.land.nature,
-          area: data.land.area_main || undefined,
-          limit_north: data.land.limit_north,
-          limit_south: data.land.limit_south,
-          limit_east: data.land.limit_east,
-          limit_west: data.land.limit_west,
-          developments: data.land.developments,
-          dev_value: data.land.dev_value || undefined,
-          others_occupy:
-            data.land.others_occupy === 'yes'
-              ? true
-              : data.land.others_occupy === 'no'
-                ? false
-                : undefined,
-        },
+        ...(needsLand && data.land.division?.trim()
+          ? {
+              land: {
+                plot_no: data.land.plot_no,
+                block_no: data.land.block_no,
+                subdivision: data.land.subdivision,
+                division: data.land.division,
+                situation: data.land.situation,
+                nature: data.land.nature,
+                area: data.land.area_main || undefined,
+                limit_north: data.land.limit_north,
+                limit_south: data.land.limit_south,
+                limit_east: data.land.limit_east,
+                limit_west: data.land.limit_west,
+                developments: data.land.developments,
+                dev_value: data.land.dev_value || undefined,
+                others_occupy:
+                  data.land.others_occupy === 'yes'
+                    ? true
+                    : data.land.others_occupy === 'no'
+                      ? false
+                      : undefined,
+              },
+            }
+          : {}),
+        ...(MORTGAGE_TYPES.has(data.type) && data.mortgage?.creditor?.trim()
+          ? {
+              mortgage: {
+                creditor: data.mortgage.creditor.trim(),
+                ...(data.mortgage.amount ? { amount: data.mortgage.amount } : {}),
+              },
+            }
+          : {}),
       });
       const applicationId = createRes.data.id;
 
@@ -225,8 +251,9 @@ export default function ApplyPage() {
         Online Pre-Application
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 4 }}>
-        Complete all 5 steps. On submission you will receive a Récépissé reference number to
-        present at the Divisional Registry, Buea.
+        Complete all 5 steps. On submission you will receive a reference number to track your
+        file. First registrations open at the Sub-Divisional Office; transfers, partitions,
+        mortgages and releases go directly to the Land Registrar (Conservateur Foncier).
       </Typography>
 
       <Stepper activeStep={activeStep} alternativeLabel sx={{ mb: 4 }}>

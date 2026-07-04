@@ -71,6 +71,18 @@ interface ParcelFull {
   titles: TitleSummary[];
 }
 
+interface SourceTitle {
+  id: string;
+  title_no: string;
+  volume: string | null;
+  folio: string | null;
+  status: string;
+  division: string;
+  area_sqm: string | null;
+  owners: { full_name: string }[];
+  encumbrances: { id: string; kind: string; party: string | null; recorded_at: string }[];
+}
+
 interface ApplicationFull {
   id: string;
   type: string;
@@ -86,6 +98,8 @@ interface ApplicationFull {
   applicant_profession: string | null;
   marital_status: string | null;
   matrimonial_regime: string | null;
+  mortgage_creditor: string | null;
+  mortgage_amount: number | null;
   applicant: {
     full_name: string;
     email: string | null;
@@ -94,6 +108,7 @@ interface ApplicationFull {
   documents: AppDocument[];
   disputes: Dispute[];
   parcel: ParcelFull | null;
+  source_title: SourceTitle | null;
 }
 
 // ── Lookup tables ──────────────────────────────────────────────────────────
@@ -105,6 +120,7 @@ const TYPE_LABELS: Record<string, string> = {
   STATE_LAND: 'State Land',
   PARTITION: 'Partition',
   MORTGAGE: 'Mortgage',
+  MORTGAGE_RELEASE: 'Mortgage Release (Mainlevée)',
   TRANSFORMATION: 'Transformation',
 };
 
@@ -114,11 +130,13 @@ const STATUS_LABELS: Record<string, string> = {
   RECEIPTED: 'Receipted',
   PUBLISHED: 'Public Notice',
   BOARD_SCHEDULED: 'Board Scheduled',
+  SURVEY_ORDERED: 'Survey Ordered',
   SURVEYED: 'Surveyed',
   REGIONAL_REVIEW: 'Regional Review',
   OPPOSITION_WINDOW: 'Opposition Window',
   CLEARED: 'Cleared',
   TITLE_ISSUED: 'Title Issued',
+  COMPLETED: 'Registered',
   QUERIED: 'Queried',
   REJECTED: 'Rejected',
 };
@@ -129,6 +147,7 @@ const DOC_TYPE_LABELS: Record<string, string> = {
   ATTESTATION: 'Attestation of Ownership',
   JUDGMENT: 'Court Judgment / Inheritance Certificate',
   NOTARIAL_ACT: 'Notarial Act (Acte Notarié)',
+  RELEASE_DEED: "Creditor's Release Deed (Mainlevée Notariée)",
   PROCES_VERBAL: 'Procès-Verbal de Bornage',
   CADASTRAL_PLAN: 'Cadastral Plan',
   OTHER: 'Other Supporting Document',
@@ -141,11 +160,13 @@ function statusColor(status: string): ChipColor {
     case 'SUBMITTED': return 'info';
     case 'RECEIPTED': return 'primary';
     case 'PUBLISHED': return 'warning';
+    case 'SURVEY_ORDERED': return 'warning';
     case 'SURVEYED': return 'secondary';
     case 'REGIONAL_REVIEW': return 'info';
     case 'OPPOSITION_WINDOW': return 'warning';
     case 'CLEARED': return 'primary';
     case 'TITLE_ISSUED': return 'success';
+    case 'COMPLETED': return 'success';
     case 'QUERIED': return 'warning';
     case 'REJECTED': return 'error';
     default: return 'default';
@@ -195,7 +216,7 @@ export default function ApplicationDetail() {
     body: string;
     new_status: string;
     decision: string;
-    action: 'transition' | 'regional-approve' | 'issue-title';
+    action: 'transition' | 'regional-approve' | 'issue-title' | 'execute';
   }>({ open: false, title: '', body: '', new_status: '', decision: '', action: 'transition' });
 
   const [rejectOpen, setRejectOpen] = useState(false);
@@ -268,6 +289,26 @@ export default function ApplicationDetail() {
   // (rather than the generic transition) since it triggers PDF generation server-side.
   const issueTitleMutation = useMutation({
     mutationFn: () => api.post(`/applications/${id}/issue-title`).then((r) => r.data),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['application', id] });
+      void queryClient.invalidateQueries({ queryKey: ['applications'] });
+      setConfirmDialog((d) => ({ ...d, open: false }));
+      setActionError(null);
+    },
+    onError: (err: unknown) => {
+      const msg = axios.isAxiosError(err)
+        ? ((err.response?.data as { message?: string } | undefined)?.message ??
+          'Action failed. Please try again.')
+        : 'An unexpected error occurred.';
+      setActionError(msg);
+    },
+  });
+
+  // Registrar-direct finalisation — mutation totale / hypothèque / mainlevée
+  // executed on the EXISTING title through its own endpoint (never issues a
+  // new title)
+  const executeMutation = useMutation({
+    mutationFn: () => api.post(`/applications/${id}/execute`, {}).then((r) => r.data),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['application', id] });
       void queryClient.invalidateQueries({ queryKey: ['applications'] });
@@ -390,9 +431,17 @@ export default function ApplicationDetail() {
 
   const status = application.status;
   const isPending =
-    transitionMutation.isPending || regionalApproveMutation.isPending || issueTitleMutation.isPending;
+    transitionMutation.isPending ||
+    regionalApproveMutation.isPending ||
+    issueTitleMutation.isPending ||
+    executeMutation.isPending;
   const latestTitle = application.parcel?.titles?.[0];
   const activeDisputes = application.disputes.filter((d) => d.status === 'ACTIVE');
+  const activeEncumbrances = application.source_title?.encumbrances ?? [];
+  // Narrowed copies for use inside the nested ActionBar closure
+  const appType = application.type;
+  const sourceTitleNo = application.source_title?.title_no;
+  const mortgageCreditor = application.mortgage_creditor;
 
   // Statutory track for this application type (mirrors the server state machine)
   const track = trackFor(application.type);
@@ -406,7 +455,7 @@ export default function ApplicationDetail() {
     body: string,
     new_status: string,
     decision: string,
-    action: 'transition' | 'regional-approve' | 'issue-title' = 'transition',
+    action: 'transition' | 'regional-approve' | 'issue-title' | 'execute' = 'transition',
   ) {
     setConfirmDialog({ open: true, title, body, new_status, decision, action });
   }
@@ -415,7 +464,9 @@ export default function ApplicationDetail() {
     const role = user?.role;
 
     // ── SDO: receives submissions and publishes for public notice ────────
-    if (role === 'sub_divisional_officer') {
+    // Only first registrations pass through the SDO desk — registrar-led
+    // tracks (alienations, partition, mortgage, release) never appear here.
+    if (role === 'sub_divisional_officer' && track === 'FULL') {
       if (status === 'SUBMITTED') {
         return (
           <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
@@ -446,9 +497,6 @@ export default function ApplicationDetail() {
         );
       }
       if (status === 'RECEIPTED') {
-        // Notarial fast-track files skip the public notice entirely and land
-        // directly on the Conservateur Foncier's desk.
-        if (track === 'FAST') return null;
         return (
           <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
             <Button
@@ -539,11 +587,11 @@ export default function ApplicationDetail() {
       }
     }
 
-    // ── Registrar (Conservateur Foncier): opposition management & title ──
+    // ── Registrar (Conservateur Foncier): registrar-led tracks & title ────
     if (role === 'registrar') {
-      // Notarial fast-track (Mutation Totale / Hypothèque): the deed comes
-      // straight from the notary — verify it and clear for registration.
-      if (status === 'RECEIPTED' && track === 'FAST') {
+      // Carve-out (morcellement): verify the deed + mother title, then
+      // commission the survey that will detach the child parcel.
+      if (status === 'SUBMITTED' && track === 'CARVE_OUT') {
         return (
           <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
             <Button
@@ -552,14 +600,21 @@ export default function ApplicationDetail() {
               sx={{ bgcolor: accent, '&:hover': { bgcolor: '#92400e' } }}
               onClick={() =>
                 openConfirm(
-                  'Verify Notarial Act — Clear for Registration?',
-                  'You confirm the notarial act is authentic, the transfer duties are paid, and the title is free of blocking charges. This type bypasses the public notice and opposition phases; the file is cleared for entry in the Livre Foncier.',
-                  'CLEARED',
-                  'Notarial act verified. Duties confirmed paid. File cleared for registration (fast-track — no public notice required).',
+                  'Verify Deed — Commission Carve-out Survey?',
+                  'You confirm the notarial act / partition judgment is authentic and the mother title is VALID in the register. Commissioning the survey sends the file to the sworn surveyor, who must demarcate the child parcel entirely inside the mother boundary.',
+                  'SURVEY_ORDERED',
+                  'Deed and mother title verified. Carve-out survey commissioned.',
                 )
               }
             >
-              Verify Notarial Act — Clear for Registration
+              Verify Deed — Order Carve-out Survey
+            </Button>
+            <Button
+              variant="outlined"
+              disabled={isPending}
+              onClick={() => setQueryOpen(true)}
+            >
+              Raise a Query
             </Button>
             <Button
               variant="outlined"
@@ -572,10 +627,20 @@ export default function ApplicationDetail() {
           </Box>
         );
       }
-      if (status === 'REGIONAL_REVIEW') {
-        // Subdivisions/partitions of already-titled land skip the window
-        if (track === 'NO_OPPOSITION') {
-          return (
+
+      // Registrar-direct (mutation totale / hypothèque / mainlevée): verify
+      // the deed against the title, then clear for execution.
+      if (status === 'SUBMITTED' && track === 'DIRECT') {
+        return (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {appType === 'TOTAL_ALIENATION' && activeEncumbrances.length > 0 && (
+              <Alert severity="warning">
+                This title carries {activeEncumbrances.length} active encumbrance(s)
+                {activeEncumbrances[0]?.party ? ` (e.g. ${activeEncumbrances[0].party})` : ''}.
+                The transfer is not blocked, but the charge follows the land — the acquirer
+                takes the parcel subject to it.
+              </Alert>
+            )}
             <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
               <Button
                 variant="contained"
@@ -583,14 +648,21 @@ export default function ApplicationDetail() {
                 sx={{ bgcolor: accent, '&:hover': { bgcolor: '#92400e' } }}
                 onClick={() =>
                   openConfirm(
-                    'Clear for Title — No Opposition Window Required?',
-                    'The parent parcel is already titled, so this file does not pass through the 30-day public opposition window. Clearing it authorises entry of the new parcel(s) in the Livre Foncier.',
+                    'Verify Deed — Clear for Registration?',
+                    'You confirm the notarial deed is authentic, the duties are paid, and it matches the title in the register. This type bypasses the public phases entirely; once cleared, you will execute the entry on the existing title.',
                     'CLEARED',
-                    'Dossier regular. Parent title verified. Cleared for registration — opposition window not applicable to this type.',
+                    'Notarial deed verified against the title. Duties confirmed paid. File cleared for execution.',
                   )
                 }
               >
-                Clear for Title (No Opposition Required)
+                Verify Deed — Clear for Registration
+              </Button>
+              <Button
+                variant="outlined"
+                disabled={isPending}
+                onClick={() => setQueryOpen(true)}
+              >
+                Raise a Query
               </Button>
               <Button
                 variant="outlined"
@@ -601,8 +673,72 @@ export default function ApplicationDetail() {
                 Reject File
               </Button>
             </Box>
-          );
-        }
+          </Box>
+        );
+      }
+
+      // Carve-out survey returned — validate it and clear for the child title
+      if (status === 'SURVEYED' && track === 'CARVE_OUT') {
+        return (
+          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+            <Button
+              variant="contained"
+              disabled={isPending}
+              sx={{ bgcolor: accent, '&:hover': { bgcolor: '#92400e' } }}
+              onClick={() =>
+                openConfirm(
+                  'Approve Survey — Clear for Child Title?',
+                  'The Procès-Verbal de Bornage is on file and the child polygon was validated inside the mother boundary. Clearing the file authorises issuance of the child title and the corresponding reduction of the mother parcel.',
+                  'CLEARED',
+                  'Carve-out survey approved. File cleared for issuance of the child title.',
+                )
+              }
+            >
+              Approve Survey — Clear for Child Title
+            </Button>
+            <Button
+              variant="outlined"
+              disabled={isPending}
+              onClick={() => setQueryOpen(true)}
+            >
+              Return for Correction
+            </Button>
+          </Box>
+        );
+      }
+
+      // Queried registrar-led file: after correction, re-open on your desk
+      if (status === 'QUERIED' && track !== 'FULL') {
+        return (
+          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+            <Button
+              variant="contained"
+              disabled={isPending}
+              sx={{ bgcolor: accent, '&:hover': { bgcolor: '#92400e' } }}
+              onClick={() =>
+                openConfirm(
+                  'Re-open File?',
+                  'The queried issue has been corrected. The file returns to your desk at the verification stage.',
+                  'SUBMITTED',
+                  'Query resolved. File re-opened on the Conservateur Foncier’s desk.',
+                )
+              }
+            >
+              Re-open File (Query Resolved)
+            </Button>
+            <Button
+              variant="outlined"
+              color="error"
+              disabled={isPending}
+              onClick={() => setRejectOpen(true)}
+            >
+              Reject File
+            </Button>
+          </Box>
+        );
+      }
+
+      if (status === 'REGIONAL_REVIEW') {
         return (
           <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
             <Button
@@ -661,7 +797,69 @@ export default function ApplicationDetail() {
         );
       }
       if (status === 'CLEARED') {
-        // Legal blocker: active oppositions freeze title issuance (mainlevée required)
+        // Registrar-direct: execute the entry on the EXISTING title
+        if (track === 'DIRECT') {
+          const executeLabel =
+            appType === 'TOTAL_ALIENATION'
+              ? 'Execute Transfer (Mutation Totale)'
+              : appType === 'MORTGAGE'
+                ? 'Inscribe Mortgage (Hypothèque)'
+                : 'Release Mortgage (Mainlevée)';
+          const executeBody =
+            appType === 'TOTAL_ALIENATION'
+              ? `The current owner of ${sourceTitleNo ?? 'the title'} will be retired and the applicant recorded as the new owner. The title number, volume and folio are unchanged. Any active encumbrance follows the land.`
+              : appType === 'MORTGAGE'
+                ? `An ACTIVE mortgage in favour of ${mortgageCreditor ?? 'the creditor'} will be inscribed on ${sourceTitleNo ?? 'the title'} and appended to the ledger.`
+                : `The active mortgage${mortgageCreditor ? ` held by ${mortgageCreditor}` : ''} on ${sourceTitleNo ?? 'the title'} will be cleared (mainlevée) and the release appended to the ledger.`;
+          return (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {appType === 'TOTAL_ALIENATION' && activeEncumbrances.length > 0 && (
+                <Alert severity="warning">
+                  {activeEncumbrances.length} active encumbrance(s) will carry over to the new
+                  owner with the land.
+                </Alert>
+              )}
+              <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                <Button
+                  variant="contained"
+                  disabled={isPending}
+                  sx={{ bgcolor: '#2e7d32', '&:hover': { bgcolor: '#1b5e20' } }}
+                  onClick={() =>
+                    openConfirm(`${executeLabel}?`, executeBody, '', '', 'execute')
+                  }
+                >
+                  {executeLabel}
+                </Button>
+              </Box>
+            </Box>
+          );
+        }
+
+        // Carve-out: issue the child title and reduce the mother parcel
+        if (track === 'CARVE_OUT') {
+          return (
+            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+              <Button
+                variant="contained"
+                disabled={isPending}
+                sx={{ bgcolor: '#2e7d32', '&:hover': { bgcolor: '#1b5e20' } }}
+                onClick={() =>
+                  openConfirm(
+                    'Issue Child Title — Reduce Mother Parcel?',
+                    `This is the final statutory act of the morcellement. A new title is created for the carved-out parcel in the applicant's name, and mother title ${sourceTitleNo ?? ''} keeps its number with its geometry and area reduced by the detached portion. Both sides of the mutation are appended to the ledger.`,
+                    '',
+                    '',
+                    'issue-title',
+                  )
+                }
+              >
+                Issue Child Title
+              </Button>
+            </Box>
+          );
+        }
+
+        // Full track: immatriculation — active oppositions freeze issuance
         const blocked = activeDisputes.length > 0;
         return (
           <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -747,16 +945,18 @@ export default function ApplicationDetail() {
           <CardContent>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', mb: 1.5 }}>
               <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary' }}>
-                {track === 'FAST'
-                  ? 'NOTARIAL FAST-TRACK — PHASE II (REGISTRATION) ONLY'
-                  : 'PHASE I — ESTABLISHING THE GROUND TRUTH · PHASE II — REGISTRATION'}
+                {track === 'DIRECT'
+                  ? 'REGISTRAR-DIRECT — LIVRE FONCIER ENTRY ON THE EXISTING TITLE'
+                  : track === 'CARVE_OUT'
+                    ? 'REGISTRAR-LED CARVE-OUT (MORCELLEMENT)'
+                    : 'PHASE I — ESTABLISHING THE GROUND TRUTH · PHASE II — REGISTRATION'}
               </Typography>
               <Typography variant="caption" color="text.secondary">
                 {track === 'FULL'
                   ? 'First registration — 30-day opposition window applies'
-                  : track === 'NO_OPPOSITION'
-                    ? 'Titled parent parcel — no opposition window'
-                    : 'Notarial act — bypasses public notice'}
+                  : track === 'CARVE_OUT'
+                    ? 'Titled mother parcel — straight to the Registrar, survey required, no opposition window'
+                    : 'Notarial deed — straight to the Registrar, no public phases'}
               </Typography>
             </Box>
             {status === 'QUERIED' || status === 'REJECTED' ? (
@@ -818,6 +1018,69 @@ export default function ApplicationDetail() {
             </Box>
           </CardContent>
         </Card>
+
+        {/* Source (mother) title — the existing title this file operates on */}
+        {application.source_title && (
+          <Card elevation={1} sx={{ mb: 2, borderLeft: '4px solid #b45309' }}>
+            <CardHeader
+              title={
+                track === 'CARVE_OUT'
+                  ? 'Mother Title (Titre Mère)'
+                  : 'Source Title (Titre Concerné)'
+              }
+              subheader="Verified against the Livre Foncier at submission"
+              titleTypographyProps={{ variant: 'subtitle1', fontWeight: 700 }}
+            />
+            <Divider />
+            <CardContent>
+              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 3 }}>
+                <InfoRow label="Title No." value={application.source_title.title_no} />
+                <InfoRow
+                  label="Volume / Folio"
+                  value={`${application.source_title.volume ?? '—'} / ${application.source_title.folio ?? '—'}`}
+                />
+                <InfoRow
+                  label="Current Owner"
+                  value={application.source_title.owners[0]?.full_name ?? '—'}
+                />
+                <InfoRow label="Registry Status" value={application.source_title.status} />
+                <InfoRow label="Division" value={application.source_title.division} />
+                <InfoRow
+                  label="Registered Area"
+                  value={
+                    application.source_title.area_sqm
+                      ? `${application.source_title.area_sqm} m²`
+                      : '—'
+                  }
+                />
+              </Box>
+              {(application.type === 'MORTGAGE' || application.type === 'MORTGAGE_RELEASE') && (
+                <Box sx={{ mt: 2, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 3 }}>
+                  <InfoRow
+                    label="Creditor (Bank / Lender)"
+                    value={application.mortgage_creditor ?? '—'}
+                  />
+                  <InfoRow
+                    label="Secured Amount"
+                    value={
+                      application.mortgage_amount != null
+                        ? `${application.mortgage_amount.toLocaleString()} FCFA`
+                        : '—'
+                    }
+                  />
+                </Box>
+              )}
+              {activeEncumbrances.length > 0 && (
+                <Alert severity="warning" sx={{ mt: 2 }}>
+                  Active encumbrance(s) on this title:{' '}
+                  {activeEncumbrances
+                    .map((e) => `${e.kind}${e.party ? ` — ${e.party}` : ''}`)
+                    .join('; ')}
+                </Alert>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Applicant details + civil status (État civil du propriétaire) */}
         <Card elevation={1} sx={{ mb: 2 }}>
@@ -1084,6 +1347,10 @@ export default function ApplicationDetail() {
               <Alert severity="info" icon={false}>
                 {status === 'TITLE_ISSUED'
                   ? 'A Land Certificate has been issued for this application. The registration is complete.'
+                  : status === 'COMPLETED'
+                  ? 'The registration has been executed on the existing title in the Livre Foncier. The file is complete.'
+                  : status === 'SURVEY_ORDERED'
+                  ? 'The carve-out survey has been commissioned — awaiting the sworn surveyor’s Procès-Verbal de Bornage.'
                   : status === 'REJECTED'
                   ? 'This application has been rejected. No further action is available.'
                   : 'This application is at a stage handled by a different officer. No action is required from you right now.'}
@@ -1158,6 +1425,8 @@ export default function ApplicationDetail() {
                 ? regionalApproveMutation.mutate()
                 : confirmDialog.action === 'issue-title'
                 ? issueTitleMutation.mutate()
+                : confirmDialog.action === 'execute'
+                ? executeMutation.mutate()
                 : transitionMutation.mutate({
                     new_status: confirmDialog.new_status,
                     decision: confirmDialog.decision,

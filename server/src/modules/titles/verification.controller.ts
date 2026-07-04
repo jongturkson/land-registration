@@ -40,6 +40,28 @@ export async function simulatePayment(req: Request, res: Response): Promise<void
   res.json({ success: true, transaction_id, provider, phone });
 }
 
+// ─── Public title existence check ───────────────────────────────────────────
+
+// GET /titles/:title_no/validate — public, free, no payment gate. Used by the
+// application wizard to confirm live that the mother title exists and is VALID
+// before the citizen files an alienation / partition / mortgage application.
+// Deliberately minimal: it never discloses the owner or the parcel details.
+export async function validateTitleNo(req: Request, res: Response): Promise<void> {
+  const title_no = (req.params['title_no'] as string).trim();
+
+  const title = await prisma.title.findUnique({
+    where: { title_no },
+    select: { status: true, division: true },
+  });
+
+  if (!title) {
+    res.json({ found: false });
+    return;
+  }
+
+  res.json({ found: true, status: title.status, division: title.division });
+}
+
 // ─── Public title verification ──────────────────────────────────────────────
 
 const VerifyTitleSchema = z.object({

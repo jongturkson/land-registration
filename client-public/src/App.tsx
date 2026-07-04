@@ -10,6 +10,7 @@ import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import BulletinBoard from './pages/BulletinBoard';
 import VerificationPortal from './pages/VerificationPortal';
+import MyApplications from './pages/MyApplications';
 
 function Layout({ children }: { children: React.ReactNode }) {
   return (
@@ -36,6 +37,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <ApplyPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/my-applications"
+          element={
+            <ProtectedRoute>
+              <MyApplications />
             </ProtectedRoute>
           }
         />

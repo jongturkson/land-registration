@@ -13,9 +13,8 @@ p, divisional_delegate, fako, document, read
 p, surveyor, fako, survey, create
 p, surveyor, fako, application, read
 p, surveyor, fako, document, read
-p, registrar, fako, title, transfer
-p, registrar, fako, title, mortgage
-p, registrar, fako, title, subdivide
+p, registrar, fako, title, cancel
+p, registrar, fako, application, execute
 p, registrar, fako, dispute, resolve
 p, registrar, fako, audit, read
 p, registrar, fako, audit, verify
