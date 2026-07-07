@@ -6,7 +6,7 @@ import L from 'leaflet';
 import { MapContainer, TileLayer, LayersControl, GeoJSON, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet-draw/dist/leaflet.draw.css';
-import 'leaflet-draw';
+import '../lib/leafletDraw'; // leaflet-draw + Leaflet 1.9 pointer-event patch
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';

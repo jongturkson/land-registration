@@ -22,11 +22,49 @@ import {
 import api from '../lib/api';
 import { COLORS } from '../theme';
 
+interface NoticeParcel {
+  division: string;
+  sub_division: string | null;
+  situation: string | null;
+  plot_no: string | null;
+  block_no: string | null;
+  area_sqm: string | null;
+  nature: string | null;
+  limit_north: string | null;
+  limit_south: string | null;
+  limit_east: string | null;
+  limit_west: string | null;
+}
+
+interface NoticeApplication {
+  type: string;
+  status: string;
+  opposition_open: boolean;
+  claimant: string;
+  parcel: NoticeParcel | null;
+}
+
 interface BulletinEntry {
   id: string;
   date: string;
   reference: string;
   summary: string;
+  application: NoticeApplication | null;
+}
+
+// Compact label/value pair used inside the notice details grid
+function NoticeField({ label, value }: { label: string; value: string | null | undefined }) {
+  if (!value) return null;
+  return (
+    <Box>
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+        {label}
+      </Typography>
+      <Typography variant="body2" sx={{ fontWeight: 600 }}>
+        {value}
+      </Typography>
+    </Box>
+  );
 }
 
 export default function BulletinBoard() {
@@ -185,15 +223,133 @@ export default function BulletinBoard() {
                   <Typography variant="body1" sx={{ lineHeight: 1.7, mb: 2 }}>
                     {entry.summary}
                   </Typography>
-                  <Button
-                    variant="outlined"
-                    color="error"
-                    size="small"
-                    sx={{ fontWeight: 700 }}
-                    onClick={() => setOppositionFor(entry)}
-                  >
-                    {t('bulletin.fileOpposition')}
-                  </Button>
+
+                  {/* Statutory notice content — claimant + land description */}
+                  {entry.application && (
+                    <Box
+                      sx={{
+                        bgcolor: '#f7f8fa',
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        borderRadius: 1,
+                        p: 2,
+                        mb: 2,
+                      }}
+                    >
+                      <Box
+                        sx={{
+                          display: 'grid',
+                          gridTemplateColumns: { xs: '1fr 1fr', sm: '1fr 1fr 1fr' },
+                          gap: 1.5,
+                        }}
+                      >
+                        <NoticeField
+                          label={t('bulletin.notice.claimant')}
+                          value={entry.application.claimant}
+                        />
+                        <NoticeField
+                          label={t('bulletin.notice.type')}
+                          value={t(`bulletin.notice.types.${entry.application.type}`, {
+                            defaultValue: entry.application.type,
+                          })}
+                        />
+                        {entry.application.parcel && (
+                          <>
+                            <NoticeField
+                              label={t('bulletin.notice.location')}
+                              value={[
+                                entry.application.parcel.division,
+                                entry.application.parcel.sub_division,
+                              ]
+                                .filter(Boolean)
+                                .join(', ')}
+                            />
+                            <NoticeField
+                              label={t('bulletin.notice.locality')}
+                              value={entry.application.parcel.situation}
+                            />
+                            <NoticeField
+                              label={t('bulletin.notice.plot')}
+                              value={entry.application.parcel.plot_no}
+                            />
+                            <NoticeField
+                              label={t('bulletin.notice.block')}
+                              value={entry.application.parcel.block_no}
+                            />
+                            <NoticeField
+                              label={t('bulletin.notice.area')}
+                              value={
+                                entry.application.parcel.area_sqm
+                                  ? `${entry.application.parcel.area_sqm} m²`
+                                  : null
+                              }
+                            />
+                            <NoticeField
+                              label={t('bulletin.notice.nature')}
+                              value={entry.application.parcel.nature}
+                            />
+                          </>
+                        )}
+                      </Box>
+
+                      {/* Boundaries (limites) — the heart of a bornage notice */}
+                      {entry.application.parcel &&
+                        [
+                          entry.application.parcel.limit_north,
+                          entry.application.parcel.limit_south,
+                          entry.application.parcel.limit_east,
+                          entry.application.parcel.limit_west,
+                        ].some(Boolean) && (
+                          <Box sx={{ mt: 1.5 }}>
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                              sx={{ display: 'block', mb: 0.5 }}
+                            >
+                              {t('bulletin.notice.boundaries')}
+                            </Typography>
+                            <Box
+                              sx={{
+                                display: 'grid',
+                                gridTemplateColumns: { xs: '1fr 1fr', sm: '1fr 1fr 1fr 1fr' },
+                                gap: 1,
+                              }}
+                            >
+                              {(
+                                [
+                                  ['north', entry.application.parcel.limit_north],
+                                  ['south', entry.application.parcel.limit_south],
+                                  ['east', entry.application.parcel.limit_east],
+                                  ['west', entry.application.parcel.limit_west],
+                                ] as const
+                              ).map(([key, limit]) =>
+                                limit ? (
+                                  <Typography key={key} variant="body2">
+                                    <strong>{t(`bulletin.notice.${key}`)}:</strong> {limit}
+                                  </Typography>
+                                ) : null,
+                              )}
+                            </Box>
+                          </Box>
+                        )}
+                    </Box>
+                  )}
+
+                  {entry.application?.opposition_open === false ? (
+                    <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                      {t('bulletin.windowClosed')}
+                    </Typography>
+                  ) : (
+                    <Button
+                      variant="outlined"
+                      color="error"
+                      size="small"
+                      sx={{ fontWeight: 700 }}
+                      onClick={() => setOppositionFor(entry)}
+                    >
+                      {t('bulletin.fileOpposition')}
+                    </Button>
+                  )}
                 </Box>
               </Box>
             ))}
