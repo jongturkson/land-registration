@@ -191,21 +191,64 @@ export default function DashboardPage() {
     );
   }
 
+  const total = allApplications?.length ?? 0;
+  const queried = (allApplications ?? []).filter((a) => a.status === 'QUERIED').length;
+  const completed = (allApplications ?? []).filter(
+    (a) => a.status === 'TITLE_ISSUED' || a.status === 'COMPLETED',
+  ).length;
+
+  const kpis = [
+    { label: 'In Your Queue', value: active.length, color: config.accentColor },
+    { label: 'Total in Region', value: total, color: '#37474f' },
+    { label: 'Queried', value: queried, color: '#b45309' },
+    { label: 'Titles Issued', value: completed, color: '#2e7d32' },
+  ];
+
   return (
     <Box>
-      {/* Role identity banner */}
+      {/* Role identity banner — official seal, gradient in the role's colour */}
       <Box
         sx={{
-          bgcolor: config.accentColor,
+          background: `linear-gradient(135deg, ${config.accentColor} 0%, #16213e 140%)`,
           color: 'white',
-          px: 4,
-          py: 3,
+          px: { xs: 2.5, md: 4 },
+          pt: 3,
+          pb: 7,
+          position: 'relative',
+          overflow: 'hidden',
         }}
       >
+        {/* Oversized watermark emblem */}
+        <Box
+          component="svg"
+          viewBox="0 0 24 24"
+          sx={{
+            position: 'absolute',
+            right: -30,
+            top: -40,
+            width: 260,
+            height: 260,
+            opacity: 0.08,
+            fill: 'white',
+            pointerEvents: 'none',
+          }}
+        >
+          <path d="M12 3L1 9l4 2.18v6L12 21l7-3.82v-6L23 9 12 3zm-1 12.99L7 13.5v-3.42L11 12v3.99zm2 0V12l4-1.92v3.42L13 15.99z" />
+        </Box>
+
+        <Typography variant="overline" sx={{ opacity: 0.7, letterSpacing: 2 }}>
+          Republic of Cameroon —{' '}
+          {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}
+        </Typography>
         <Typography
-          variant="h5"
+          variant="h4"
           component="h1"
-          sx={{ fontFamily: '"Lora", serif', fontWeight: 700, mb: 0.5 }}
+          sx={{
+            fontFamily: '"Lora", serif',
+            fontWeight: 700,
+            mb: 0.5,
+            fontSize: { xs: '1.6rem', md: '2.1rem' },
+          }}
         >
           {config.title}
         </Typography>
@@ -228,7 +271,41 @@ export default function DashboardPage() {
         )}
       </Box>
 
-      <Box sx={{ p: 4 }}>
+      <Box sx={{ px: { xs: 2, md: 4 }, pb: 4 }}>
+        {/* KPI cards overlapping the banner */}
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(4, 1fr)' },
+            gap: 2,
+            mt: -4.5,
+            mb: 4,
+          }}
+        >
+          {kpis.map((kpi) => (
+            <Paper
+              key={kpi.label}
+              elevation={2}
+              sx={{
+                p: 2,
+                borderTop: `4px solid ${kpi.color}`,
+                borderRadius: 2,
+              }}
+            >
+              <Typography
+                variant="overline"
+                color="text.secondary"
+                sx={{ letterSpacing: 1, lineHeight: 1.4, display: 'block' }}
+              >
+                {kpi.label}
+              </Typography>
+              <Typography variant="h4" sx={{ fontWeight: 800, color: kpi.color }}>
+                {kpi.value}
+              </Typography>
+            </Paper>
+          ))}
+        </Box>
+
         {/* Active queue */}
         <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.5 }}>
           Action Queue

@@ -8,6 +8,7 @@ const resources = {
     translation: {
       nav: {
         brand: 'Land Registration Portal',
+        menu: 'Menu',
         howItWorks: 'How It Works',
         verify: 'Verify Title',
         bulletin: 'Public Bulletin',
@@ -112,6 +113,7 @@ const resources = {
     translation: {
       nav: {
         brand: 'Portail d’Immatriculation Foncière',
+        menu: 'Menu',
         howItWorks: 'Comment Ça Marche',
         verify: 'Vérifier un Titre',
         bulletin: 'Bulletin Public',
