@@ -15,6 +15,7 @@ import {
   Typography,
 } from '@mui/material';
 import axios from 'axios';
+import { useTranslation } from 'react-i18next';
 import {
   APP_TYPES,
   MORTGAGE_TYPES,
@@ -32,7 +33,7 @@ import StepReview from '../components/wizard/StepReview';
 import AcknowledgementReceipt from '../components/AcknowledgementReceipt';
 import api from '../lib/api';
 
-const STEP_LABELS = ['Type', 'Owner', 'Land', 'Documents', 'Review'];
+const STEP_KEYS = ['type', 'owner', 'land', 'documents', 'review'] as const;
 
 // The land step's requirements depend on the application type (title number,
 // parcel description, creditor…) — trigger the whole nested objects so the
@@ -45,6 +46,7 @@ const STEP_FIELDS: Record<number, Path<WizardFormData>[]> = {
 };
 
 export default function ApplyPage() {
+  const { t } = useTranslation();
   // Pre-select the registration type when arriving from "How Registration Works"
   // via /apply?type=<wizardType>; ignore anything that isn't a valid enum value.
   const [searchParams] = useSearchParams();
@@ -203,17 +205,15 @@ export default function ApplyPage() {
     } catch (err: unknown) {
       if (axios.isAxiosError(err)) {
         if (err.response?.status === 401) {
-          setSubmitError(
-            'Authentication required. Please log in as a citizen before submitting.',
-          );
+          setSubmitError(t('apply.errors.auth'));
         } else {
           const msg =
             (err.response?.data as { message?: string } | undefined)?.message ??
-            'Submission failed. Please try again.';
+            t('apply.errors.failed');
           setSubmitError(msg);
         }
       } else {
-        setSubmitError('Network error. Please check your connection and try again.');
+        setSubmitError(t('apply.errors.network'));
       }
     } finally {
       setSubmitting(false);
@@ -238,28 +238,39 @@ export default function ApplyPage() {
     <StepReview key="review" form={form} submitError={submitError} />,
   ];
 
-  const isLastStep = activeStep === STEP_LABELS.length - 1;
+  const isLastStep = activeStep === STEP_KEYS.length - 1;
 
   return (
-    <Container maxWidth="md" sx={{ py: 4 }}>
+    <Container maxWidth="md" sx={{ py: { xs: 3, md: 4 }, px: { xs: 1.5, sm: 3 } }}>
       <Typography
         variant="h4"
         component="h1"
         gutterBottom
-        sx={{ fontFamily: "'Lora', serif", fontWeight: 700 }}
+        sx={{
+          fontFamily: "'Lora', serif",
+          fontWeight: 700,
+          fontSize: { xs: '1.7rem', md: '2.1rem' },
+        }}
       >
-        Online Pre-Application
+        {t('apply.title')}
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 4 }}>
-        Complete all 5 steps. On submission you will receive a reference number to track your
-        file. First registrations open at the Sub-Divisional Office; transfers, partitions,
-        mortgages and releases go directly to the Land Registrar (Conservateur Foncier).
+        {t('apply.subtitle')}
       </Typography>
 
-      <Stepper activeStep={activeStep} alternativeLabel sx={{ mb: 4 }}>
-        {STEP_LABELS.map((label, idx) => (
-          <Step key={label} completed={activeStep > idx}>
-            <StepLabel>{label}</StepLabel>
+      <Stepper
+        activeStep={activeStep}
+        alternativeLabel
+        sx={{
+          mb: 4,
+          // On phones keep the dots/connectors but drop the text labels —
+          // "Step X of 5" underneath carries the same information.
+          '& .MuiStepLabel-label': { display: { xs: 'none', sm: 'block' } },
+        }}
+      >
+        {STEP_KEYS.map((key, idx) => (
+          <Step key={key} completed={activeStep > idx}>
+            <StepLabel>{t(`apply.steps.${key}`)}</StepLabel>
           </Step>
         ))}
       </Stepper>
@@ -284,11 +295,11 @@ export default function ApplyPage() {
               onClick={handleBack}
               disabled={activeStep === 0 || submitting}
             >
-              Back
+              {t('apply.back')}
             </Button>
 
             <Typography variant="caption" color="text.secondary">
-              Step {activeStep + 1} of {STEP_LABELS.length}
+              {t('apply.stepOf', { current: activeStep + 1, total: STEP_KEYS.length })}
             </Typography>
 
             {isLastStep ? (
@@ -301,11 +312,11 @@ export default function ApplyPage() {
                   submitting ? <CircularProgress size={16} color="inherit" /> : undefined
                 }
               >
-                {submitting ? 'Submitting…' : 'Submit Application'}
+                {submitting ? t('apply.submitting') : t('apply.submit')}
               </Button>
             ) : (
               <Button variant="contained" onClick={handleNext}>
-                Next
+                {t('apply.next')}
               </Button>
             )}
           </Box>

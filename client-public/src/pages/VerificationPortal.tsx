@@ -33,6 +33,7 @@ import {
   VerifiedUser as VerifiedIcon,
 } from '@mui/icons-material';
 import axios from 'axios';
+import { useTranslation } from 'react-i18next';
 import { COLORS } from '../theme';
 import api from '../lib/api';
 
@@ -90,6 +91,8 @@ function formatDate(iso: string | null): string {
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export default function VerificationPortal() {
+  const { t, i18n } = useTranslation();
+  const dateLocale = i18n.language.startsWith('fr') ? 'fr-FR' : 'en-GB';
   const [titleNo, setTitleNo] = useState('');
   const [volume, setVolume] = useState('');
   const [folio, setFolio] = useState('');
@@ -122,15 +125,15 @@ export default function VerificationPortal() {
 
   function openPayment() {
     if (!titleNo.trim()) {
-      setSearchError('Please enter a Land Title Number to verify.');
+      setSearchError(t('verify.errTitleNo'));
       return;
     }
     if (!volume.trim()) {
-      setSearchError('Please enter the Volume. Title Number, Volume and Folio are all required.');
+      setSearchError(t('verify.errVolume'));
       return;
     }
     if (!folio.trim()) {
-      setSearchError('Please enter the Folio. Title Number, Volume and Folio are all required.');
+      setSearchError(t('verify.errFolio'));
       return;
     }
     setSearchError(null);
@@ -146,7 +149,7 @@ export default function VerificationPortal() {
 
   async function handlePayAndVerify() {
     if (!phone.trim()) {
-      setModalError('Please enter the phone number to be charged.');
+      setModalError(t('verify.errPhone'));
       return;
     }
     setModalError(null);
@@ -180,19 +183,17 @@ export default function VerificationPortal() {
       setStage('idle');
       if (axios.isAxiosError(err)) {
         if (err.response?.status === 404) {
-          setModalError(
-            'No land title was found with that number. Please check the number and try again.',
-          );
+          setModalError(t('verify.errNotFound'));
         } else if (err.response?.status === 402) {
-          setModalError('Payment is required before verification.');
+          setModalError(t('verify.errPayRequired'));
         } else {
           setModalError(
             (err.response?.data as { message?: string } | undefined)?.message ??
-              'Verification failed. Please try again.',
+              t('verify.errVerifyFailed'),
           );
         }
       } else {
-        setModalError('Something went wrong. Please try again.');
+        setModalError(t('verify.errGeneric'));
       }
     }
   }
@@ -253,12 +254,17 @@ export default function VerificationPortal() {
             <VerifiedIcon sx={{ fontSize: 52, opacity: 0.9, mb: 1 }} />
             <Typography
               variant="h3"
-              sx={{ fontFamily: "'Lora', serif", fontWeight: 700, mb: 1.5 }}
+              sx={{
+                fontFamily: "'Lora', serif",
+                fontWeight: 700,
+                mb: 1.5,
+                fontSize: { xs: '1.9rem', sm: '2.6rem' },
+              }}
             >
-              Verify a Land Title
+              {t('verify.heroTitle')}
             </Typography>
             <Typography variant="h6" sx={{ fontWeight: 400, opacity: 0.9, mb: 4 }}>
-              Obtain an official Digital Certificate of Ownership for any registered parcel.
+              {t('verify.heroSubtitle')}
             </Typography>
 
             <Paper
@@ -276,8 +282,8 @@ export default function VerificationPortal() {
               <TextField
                 fullWidth
                 required
-                label="Land Title Number"
-                placeholder="e.g. TF-2026-12345"
+                label={t('verify.titleNo')}
+                placeholder={t('verify.titleNoPlaceholder')}
                 value={titleNo}
                 onChange={(e) => setTitleNo(e.target.value)}
                 onKeyDown={(e) => {
@@ -299,9 +305,9 @@ export default function VerificationPortal() {
                 }}
               >
                 <TextField
-                  label="Volume"
+                  label={t('verify.volume')}
                   required
-                  placeholder="e.g. 116"
+                  placeholder={t('verify.volumePlaceholder')}
                   value={volume}
                   onChange={(e) => setVolume(e.target.value)}
                   onKeyDown={(e) => {
@@ -311,9 +317,9 @@ export default function VerificationPortal() {
                   sx={{ flex: 1 }}
                 />
                 <TextField
-                  label="Folio"
+                  label={t('verify.folio')}
                   required
-                  placeholder="e.g. 42"
+                  placeholder={t('verify.folioPlaceholder')}
                   value={folio}
                   onChange={(e) => setFolio(e.target.value)}
                   onKeyDown={(e) => {
@@ -333,7 +339,7 @@ export default function VerificationPortal() {
                     '&:hover': { bgcolor: '#a5322a' },
                   }}
                 >
-                  Verify
+                  {t('verify.submit')}
                 </Button>
               </Box>
             </Paper>
@@ -343,8 +349,7 @@ export default function VerificationPortal() {
               </Typography>
             )}
             <Typography variant="caption" sx={{ display: 'block', mt: 3, opacity: 0.75 }}>
-              Title Number, Volume and Folio are all required. A statutory search fee applies —
-              payable by MTN Mobile Money or Orange Money.
+              {t('verify.feeNote')}
             </Typography>
           </Container>
         </Box>
@@ -356,13 +361,13 @@ export default function VerificationPortal() {
           {/* Action bar (hidden on print) */}
           <Box className="no-print" sx={{ display: 'flex', gap: 1.5, justifyContent: 'flex-end', mb: 2, flexWrap: 'wrap' }}>
             <Button variant="outlined" startIcon={<PrintIcon />} onClick={() => window.print()}>
-              Print
+              {t('verify.print')}
             </Button>
             <Button variant="outlined" startIcon={<DownloadIcon />} onClick={handleDownload}>
-              Download
+              {t('verify.download')}
             </Button>
             <Button variant="contained" onClick={verifyAnother} sx={{ bgcolor: COLORS.primary }}>
-              Verify Another
+              {t('verify.verifyAnother')}
             </Button>
           </Box>
 
@@ -378,13 +383,21 @@ export default function VerificationPortal() {
             {/* Letterhead */}
             <Box sx={{ textAlign: 'center', mb: 2 }}>
               <Typography variant="overline" sx={{ letterSpacing: '0.18em', color: 'text.secondary' }}>
-                Republic of Cameroon · Ministry of State Property &amp; Land Tenure
+                {t('verify.letterheadTop')}
               </Typography>
-              <Typography variant="h4" sx={{ fontFamily: "'Lora', serif", fontWeight: 700, mt: 1 }}>
-                Digital Certificate of Ownership
+              <Typography
+                variant="h4"
+                sx={{
+                  fontFamily: "'Lora', serif",
+                  fontWeight: 700,
+                  mt: 1,
+                  fontSize: { xs: '1.5rem', sm: '2.1rem' },
+                }}
+              >
+                {t('verify.certTitle')}
               </Typography>
               <Typography variant="subtitle2" sx={{ fontStyle: 'italic', color: 'text.secondary' }}>
-                Attestation Numérique de Propriété
+                {t('verify.certSubtitle')}
               </Typography>
             </Box>
 
@@ -406,13 +419,11 @@ export default function VerificationPortal() {
                 <Typography
                   sx={{ fontSize: { xs: '2rem', sm: '2.8rem' }, fontWeight: 800, letterSpacing: '0.1em', lineHeight: 1 }}
                 >
-                  {isValid ? 'VALID' : (result.status || 'CANCELLED').toUpperCase()}
+                  {isValid ? t('verify.valid') : (result.status || 'CANCELLED').toUpperCase()}
                 </Typography>
               </Box>
               <Typography variant="body2" color="text.secondary" sx={{ mt: 1.5 }}>
-                {isValid
-                  ? 'This land title is registered and in good standing.'
-                  : 'This land title is no longer valid.'}
+                {isValid ? t('verify.validNote') : t('verify.invalidNote')}
               </Typography>
             </Box>
 
@@ -425,36 +436,36 @@ export default function VerificationPortal() {
                 mb: 3,
               }}
             >
-              <Field label="Title Number" value={result.title_no} mono />
-              <Field label="Volume" value={result.volume ?? '—'} mono />
-              <Field label="Folio" value={result.folio ?? '—'} mono />
-              <Field label="Division" value={result.division} />
+              <Field label={t('verify.titleNo')} value={result.title_no} mono />
+              <Field label={t('verify.volume')} value={result.volume ?? '—'} mono />
+              <Field label={t('verify.folio')} value={result.folio ?? '—'} mono />
+              <Field label={t('verify.division')} value={result.division} />
             </Box>
 
             <Divider sx={{ mb: 3 }} />
 
             {/* Owner */}
             <Typography variant="subtitle2" sx={{ fontWeight: 700, color: COLORS.primary, mb: 1 }}>
-              Registered Owner (Titulaire)
+              {t('verify.ownerHeading')}
             </Typography>
             <Box sx={{ mb: 1 }}>
               <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                {result.owner?.full_name ?? 'Not on record'}
+                {result.owner?.full_name ?? t('verify.notOnRecord')}
               </Typography>
               {result.owner?.ancestors && (
                 <Typography variant="body2" color="text.secondary">
-                  Child of {result.owner.ancestors}
+                  {t('verify.childOf', { ancestors: result.owner.ancestors })}
                 </Typography>
               )}
               {result.owner?.birth_place && (
                 <Typography variant="body2" color="text.secondary">
-                  Born at {result.owner.birth_place}
+                  {t('verify.bornAt', { place: result.owner.birth_place })}
                 </Typography>
               )}
             </Box>
             {result.nature && (
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Property: {result.nature}
+                {t('verify.property')}: {result.nature}
               </Typography>
             )}
 
@@ -462,21 +473,21 @@ export default function VerificationPortal() {
 
             {/* Encumbrances */}
             <Typography variant="subtitle2" sx={{ fontWeight: 700, color: COLORS.primary, mb: 1.5 }}>
-              Encumbrances &amp; Legal Charges
+              {t('verify.encumbrancesHeading')}
             </Typography>
             {result.encumbrances.length === 0 ? (
               <Alert severity="success" variant="outlined" icon={<VerifiedIcon />}>
-                No active encumbrances. Title is clear.
+                {t('verify.noEncumbrances')}
               </Alert>
             ) : (
               <TableContainer component={Paper} variant="outlined">
                 <Table size="small">
                   <TableHead>
                     <TableRow sx={{ bgcolor: COLORS.surfaceTint }}>
-                      <TableCell sx={{ fontWeight: 700 }}>Type</TableCell>
-                      <TableCell sx={{ fontWeight: 700 }}>Party</TableCell>
-                      <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
-                      <TableCell sx={{ fontWeight: 700 }}>Recorded</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>{t('verify.encType')}</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>{t('verify.encParty')}</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>{t('verify.encStatus')}</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>{t('verify.encRecorded')}</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -504,12 +515,13 @@ export default function VerificationPortal() {
             <Divider sx={{ my: 3 }} />
             <Box sx={{ textAlign: 'center' }}>
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                Issued on {formatDate(result.issued_at)} · Verified on{' '}
-                {new Date().toLocaleString('en-GB')}
+                {t('verify.issuedOn', {
+                  date: formatDate(result.issued_at),
+                  when: new Date().toLocaleString(dateLocale),
+                })}
               </Typography>
               <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mt: 0.5 }}>
-                This is a computer-generated certificate produced by the Land Registration Portal.
-                Its authenticity may be re-confirmed at any time using the Title Number above.
+                {t('verify.computerGenerated')}
               </Typography>
             </Box>
           </Paper>
@@ -519,7 +531,7 @@ export default function VerificationPortal() {
       {/* ── Payment modal ─────────────────────────────────────────────────── */}
       <Dialog open={modalOpen} onClose={closePayment} fullWidth maxWidth="sm">
         <DialogTitle sx={{ fontFamily: "'Lora', serif", fontWeight: 700 }}>
-          Search Fee Payment
+          {t('verify.payTitle')}
           <Typography variant="body2" color="text.secondary">
             Title No. {titleNo || '—'}
             {volume.trim() && ` · Vol. ${volume.trim()}`}
@@ -532,14 +544,12 @@ export default function VerificationPortal() {
             <Box sx={{ textAlign: 'center', py: 5 }}>
               <CircularProgress size={56} sx={{ color: COLORS.accent, mb: 3 }} />
               <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                {stage === 'paying'
-                  ? 'Prompting user for PIN… please check your phone.'
-                  : 'Payment received. Retrieving certificate…'}
+                {stage === 'paying' ? t('verify.promptingPin') : t('verify.retrieving')}
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
                 {stage === 'paying'
-                  ? `A payment request has been sent to ${phone} via ${PROVIDER_LABEL[provider]}.`
-                  : 'Please wait a moment.'}
+                  ? t('verify.paymentSentTo', { phone, provider: PROVIDER_LABEL[provider] })
+                  : t('verify.pleaseWait')}
               </Typography>
             </Box>
           ) : (
@@ -548,7 +558,7 @@ export default function VerificationPortal() {
 
               {/* Requester type / fee */}
               <FormControl>
-                <FormLabel sx={{ fontWeight: 600, mb: 1 }}>Requester Type</FormLabel>
+                <FormLabel sx={{ fontWeight: 600, mb: 1 }}>{t('verify.requesterType')}</FormLabel>
                 <RadioGroup
                   value={requesterType}
                   onChange={(e) => setRequesterType(e.target.value as RequesterType)}
@@ -556,12 +566,12 @@ export default function VerificationPortal() {
                   <FormControlLabel
                     value="INDIVIDUAL"
                     control={<Radio />}
-                    label="Individual (31,000 FCFA)"
+                    label={t('verify.individual')}
                   />
                   <FormControlLabel
                     value="COMPANY"
                     control={<Radio />}
-                    label="Company / Institution (62,000 FCFA)"
+                    label={t('verify.company')}
                   />
                 </RadioGroup>
               </FormControl>
@@ -570,7 +580,7 @@ export default function VerificationPortal() {
 
               {/* Provider */}
               <FormControl>
-                <FormLabel sx={{ fontWeight: 600, mb: 1 }}>Payment Method</FormLabel>
+                <FormLabel sx={{ fontWeight: 600, mb: 1 }}>{t('verify.payMethod')}</FormLabel>
                 <RadioGroup value={provider} onChange={(e) => setProvider(e.target.value as Provider)}>
                   <FormControlLabel value="MOMO" control={<Radio />} label="MTN Mobile Money" />
                   <FormControlLabel value="ORANGE_MONEY" control={<Radio />} label="Orange Money" />
@@ -579,7 +589,7 @@ export default function VerificationPortal() {
 
               {/* Phone */}
               <TextField
-                label="Phone Number"
+                label={t('verify.phone')}
                 placeholder="6XX XXX XXX"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
@@ -590,7 +600,7 @@ export default function VerificationPortal() {
               <Paper variant="outlined" sx={{ p: 2, bgcolor: COLORS.surfaceTint, borderColor: COLORS.accent }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <Typography variant="body2" color="text.secondary">
-                    Amount to pay
+                    {t('verify.amountToPay')}
                   </Typography>
                   <Typography variant="h6" sx={{ fontWeight: 800, color: COLORS.accent }}>
                     {FEES[requesterType].toLocaleString()} FCFA
@@ -603,7 +613,7 @@ export default function VerificationPortal() {
 
         <DialogActions sx={{ px: 3, py: 2 }}>
           <Button onClick={closePayment} disabled={busy}>
-            Cancel
+            {t('verify.cancel')}
           </Button>
           <Button
             variant="contained"
@@ -611,7 +621,7 @@ export default function VerificationPortal() {
             disabled={busy}
             sx={{ bgcolor: COLORS.accent, '&:hover': { bgcolor: '#a5322a' }, px: 3 }}
           >
-            {busy ? 'Processing…' : `Pay & Verify`}
+            {busy ? t('verify.processing') : t('verify.payAndVerify')}
           </Button>
         </DialogActions>
       </Dialog>

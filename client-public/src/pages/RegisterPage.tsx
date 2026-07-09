@@ -15,10 +15,12 @@ import {
   Typography,
 } from '@mui/material';
 import { Link, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import axios from 'axios';
 import { useAuth, type AuthUser } from '../lib/auth';
 import api from '../lib/api';
 
+// Region names are proper nouns — identical in both languages
 const REGIONS = [
   { value: 'fako', label: 'Fako (South West Region)' },
   { value: 'moungo', label: 'Moungo (Littoral Region)' },
@@ -27,23 +29,25 @@ const REGIONS = [
   { value: 'mfoundi', label: 'Mfoundi (Centre Region)' },
 ];
 
+// Messages hold i18n keys under register.errors.* — translated at render time
 const RegisterSchema = z
   .object({
-    full_name: z.string().min(2, 'Full name must be at least 2 characters'),
-    email: z.string().email('Please enter a valid email address'),
+    full_name: z.string().min(2, 'nameMin'),
+    email: z.string().email('emailInvalid'),
     phone: z.string().optional(),
-    region: z.string().min(1, 'Please select your region'),
-    password: z.string().min(8, 'Password must be at least 8 characters'),
-    confirm_password: z.string().min(1, 'Please confirm your password'),
+    region: z.string().min(1, 'regionRequired'),
+    password: z.string().min(8, 'passwordMin'),
+    confirm_password: z.string().min(1, 'confirmRequired'),
   })
   .refine((d) => d.password === d.confirm_password, {
     path: ['confirm_password'],
-    message: 'Passwords do not match',
+    message: 'mismatch',
   });
 
 type RegisterData = z.infer<typeof RegisterSchema>;
 
 export default function RegisterPage() {
+  const { t } = useTranslation();
   const { setAuth } = useAuth();
   const navigate = useNavigate();
 
@@ -67,14 +71,14 @@ export default function RegisterPage() {
     } catch (err: unknown) {
       if (axios.isAxiosError(err)) {
         if (err.response?.status === 409) {
-          setError('An account with this email already exists. Please sign in instead.');
+          setError(t('register.errors.exists'));
         } else if (err.response?.status === 429) {
-          setError('Too many registration attempts. Please try again later.');
+          setError(t('register.errors.tooMany'));
         } else {
-          setError(err.response?.data?.message ?? 'Something went wrong. Please try again.');
+          setError(err.response?.data?.message ?? t('register.errors.generic'));
         }
       } else {
-        setError('Network error. Please check your connection.');
+        setError(t('register.errors.network'));
       }
     } finally {
       setLoading(false);
@@ -104,10 +108,10 @@ export default function RegisterPage() {
             </svg>
           </Box>
           <Typography variant="h5" gutterBottom sx={{ fontFamily: "'Lora', serif", fontWeight: 700 }}>
-            Create an Account
+            {t('register.title')}
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Register to begin your land title pre-application.
+            {t('register.subtitle')}
           </Typography>
         </Box>
 
@@ -119,12 +123,12 @@ export default function RegisterPage() {
               render={({ field }) => (
                 <TextField
                   {...field}
-                  label="Full Name"
+                  label={t('register.fullName')}
                   required
                   autoComplete="name"
                   autoFocus
                   error={!!errors.full_name}
-                  helperText={errors.full_name?.message}
+                  helperText={errors.full_name && t(`register.errors.${errors.full_name.message}`)}
                   fullWidth
                 />
               )}
@@ -136,12 +140,12 @@ export default function RegisterPage() {
               render={({ field }) => (
                 <TextField
                   {...field}
-                  label="Email Address"
+                  label={t('register.email')}
                   type="email"
                   required
                   autoComplete="email"
                   error={!!errors.email}
-                  helperText={errors.email?.message}
+                  helperText={errors.email && t(`register.errors.${errors.email.message}`)}
                   fullWidth
                 />
               )}
@@ -153,11 +157,11 @@ export default function RegisterPage() {
               render={({ field }) => (
                 <TextField
                   {...field}
-                  label="Phone Number (optional)"
+                  label={t('register.phone')}
                   type="tel"
                   autoComplete="tel"
                   error={!!errors.phone}
-                  helperText={errors.phone?.message ?? 'e.g. +237 677 000 000'}
+                  helperText={t('register.phoneHelp')}
                   fullWidth
                 />
               )}
@@ -171,10 +175,14 @@ export default function RegisterPage() {
                 <TextField
                   {...field}
                   select
-                  label="Region / Division"
+                  label={t('register.region')}
                   required
                   error={!!errors.region}
-                  helperText={errors.region?.message ?? 'Select the region where your land is located'}
+                  helperText={
+                    errors.region
+                      ? t(`register.errors.${errors.region.message}`)
+                      : t('register.regionHelp')
+                  }
                   fullWidth
                 >
                   {REGIONS.map(({ value, label }) => (
@@ -192,12 +200,16 @@ export default function RegisterPage() {
               render={({ field }) => (
                 <TextField
                   {...field}
-                  label="Password"
+                  label={t('register.password')}
                   type="password"
                   required
                   autoComplete="new-password"
                   error={!!errors.password}
-                  helperText={errors.password?.message ?? 'At least 8 characters'}
+                  helperText={
+                    errors.password
+                      ? t(`register.errors.${errors.password.message}`)
+                      : t('register.passwordHelp')
+                  }
                   fullWidth
                 />
               )}
@@ -209,12 +221,15 @@ export default function RegisterPage() {
               render={({ field }) => (
                 <TextField
                   {...field}
-                  label="Confirm Password"
+                  label={t('register.confirmPassword')}
                   type="password"
                   required
                   autoComplete="new-password"
                   error={!!errors.confirm_password}
-                  helperText={errors.confirm_password?.message}
+                  helperText={
+                    errors.confirm_password &&
+                    t(`register.errors.${errors.confirm_password.message}`)
+                  }
                   fullWidth
                 />
               )}
@@ -231,13 +246,13 @@ export default function RegisterPage() {
               fullWidth
               startIcon={loading ? <CircularProgress size={16} color="inherit" /> : undefined}
             >
-              {loading ? 'Creating account…' : 'Create Account'}
+              {loading ? t('register.submitting') : t('register.submit')}
             </Button>
 
             <Typography variant="body2" align="center">
-              Already have an account?{' '}
+              {t('register.haveAccount')}{' '}
               <MuiLink component={Link} to="/login" underline="hover">
-                Sign in here
+                {t('register.signInHere')}
               </MuiLink>
             </Typography>
           </Box>

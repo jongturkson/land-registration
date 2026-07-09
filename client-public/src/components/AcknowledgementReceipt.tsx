@@ -1,5 +1,6 @@
 import { Print as PrintIcon } from '@mui/icons-material';
 import { Box, Button, Container, Divider, Paper, Typography } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 
 type Props = {
   referenceNo: string;
@@ -44,6 +45,7 @@ function Seal() {
 }
 
 export default function AcknowledgementReceipt({ referenceNo, applicantName, date }: Props) {
+  const { t } = useTranslation();
   const formattedDate = date.toLocaleDateString('fr-CM', {
     day: '2-digit',
     month: 'long',
@@ -61,7 +63,7 @@ export default function AcknowledgementReceipt({ referenceNo, applicantName, dat
         }}
       >
         <Button variant="outlined" startIcon={<PrintIcon />} onClick={() => window.print()}>
-          Print Receipt
+          {t('wizard.receipt.print')}
         </Button>
       </Box>
 
@@ -98,7 +100,7 @@ export default function AcknowledgementReceipt({ referenceNo, applicantName, dat
           gutterBottom
           sx={{ fontFamily: "'Lora', serif", fontWeight: 700, mt: 0.5 }}
         >
-          Application Receipt
+          {t('wizard.receipt.title')}
         </Typography>
 
         <Typography variant="subtitle2" color="text.secondary" gutterBottom sx={{ fontStyle: 'italic' }}>
@@ -138,7 +140,7 @@ export default function AcknowledgementReceipt({ referenceNo, applicantName, dat
           </Box>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
             <Typography variant="body2" color="text.secondary">
-              Date Submitted
+              {t('wizard.receipt.dateSubmitted')}
             </Typography>
             <Typography variant="body2" sx={{ fontWeight: 600 }}>
               {formattedDate}
@@ -152,13 +154,9 @@ export default function AcknowledgementReceipt({ referenceNo, applicantName, dat
           sx={{ p: 2, backgroundColor: '#fbeef0', borderColor: VERMILION, borderRadius: 1 }}
         >
           <Typography variant="body2" sx={{ fontWeight: 600, color: VERMILION, mb: 0.5 }}>
-            Important Notice
+            {t('wizard.receipt.noticeTitle')}
           </Typography>
-          <Typography variant="body2">
-            Present this receipt at the <strong>Divisional Registry, Buea</strong> within{' '}
-            <strong>30 days</strong> of this date, together with original supporting documents, to
-            complete your registration.
-          </Typography>
+          <Typography variant="body2">{t('wizard.receipt.noticeBody')}</Typography>
         </Paper>
 
         <Typography
@@ -166,8 +164,7 @@ export default function AcknowledgementReceipt({ referenceNo, applicantName, dat
           color="text.disabled"
           sx={{ display: 'block', mt: 3, fontSize: '10px', letterSpacing: '0.05em' }}
         >
-          This receipt is computer-generated. For assistance contact the Divisional Registry,
-          Buea — Tel: +237 000 000 000
+          {t('wizard.receipt.footer')}
         </Typography>
       </Paper>
     </Container>

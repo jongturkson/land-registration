@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { Controller, useWatch } from 'react-hook-form';
+import { useTranslation } from 'react-i18next';
 import {
   Box,
   Chip,
@@ -35,6 +36,7 @@ type TitleCheckState =
   | { kind: 'error' };
 
 export default function StepLand({ form }: WizardStepProps) {
+  const { t } = useTranslation();
   const { control, setValue, formState: { errors } } = form;
   const appType = useWatch({ control, name: 'type' }) as string | undefined;
   const hasLayoutPlan = useWatch({ control, name: 'land.has_layout_plan' });
@@ -85,22 +87,22 @@ export default function StepLand({ form }: WizardStepProps) {
   function titleCheckIndicator() {
     switch (titleCheck.kind) {
       case 'checking':
-        return <Chip size="small" icon={<CircularProgress size={14} />} label="Checking the register…" />;
+        return <Chip size="small" icon={<CircularProgress size={14} />} label={t('wizard.land.checking')} />;
       case 'ok':
         return (
           <Chip
             size="small"
             color="success"
             icon={<CheckCircleIcon />}
-            label={`VALID title on record${titleCheck.division ? ` — ${titleCheck.division} Division` : ''}`}
+            label={`${t('wizard.land.validOnRecord')}${titleCheck.division ? ` — ${titleCheck.division}` : ''}`}
           />
         );
       case 'not-found':
-        return <Chip size="small" color="error" icon={<CancelIcon />} label="No title with this number in the register" />;
+        return <Chip size="small" color="error" icon={<CancelIcon />} label={t('wizard.land.notFound')} />;
       case 'invalid':
-        return <Chip size="small" color="error" icon={<CancelIcon />} label={`Title is ${titleCheck.status} — cannot be operated on`} />;
+        return <Chip size="small" color="error" icon={<CancelIcon />} label={t('wizard.land.invalidStatus', { status: titleCheck.status })} />;
       case 'error':
-        return <Chip size="small" color="warning" label="Could not reach the register — it will be checked at submission" />;
+        return <Chip size="small" color="warning" label={t('wizard.land.checkError')} />;
       default:
         return null;
     }
@@ -109,14 +111,14 @@ export default function StepLand({ form }: WizardStepProps) {
   return (
     <Box>
       <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
-        Land Details
+        {t('wizard.land.title')}
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
         {needsSourceTitle
           ? isCarveOut
-            ? 'Identify the existing (mother) title, then describe the portion of land being acquired.'
-            : 'Identify the existing title this application operates on.'
-          : 'Describe the parcel of land as it appears on the survey plan.'}
+            ? t('wizard.land.subtitleCarveOut')
+            : t('wizard.land.subtitleSourceTitle')
+          : t('wizard.land.subtitleDescribe')}
       </Typography>
 
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
@@ -132,12 +134,10 @@ export default function StepLand({ form }: WizardStepProps) {
             }}
           >
             <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.5 }}>
-              {isCarveOut ? 'Mother Land Title (Titre Mère)' : 'Existing Land Title'}
+              {isCarveOut ? t('wizard.land.motherTitle') : t('wizard.land.existingTitle')}
             </Typography>
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
-              {isCarveOut
-                ? 'The number of the title from which your portion will be carved. It is checked live against the Land Register.'
-                : 'The number as printed on the Titre Foncier. It is checked live against the Land Register.'}
+              {isCarveOut ? t('wizard.land.motherTitleHint') : t('wizard.land.existingTitleHint')}
             </Typography>
             <Controller
               name="land.title_no"
@@ -145,8 +145,8 @@ export default function StepLand({ form }: WizardStepProps) {
               render={({ field }) => (
                 <TextField
                   {...field}
-                  label="Land Title No."
-                  placeholder="e.g. TF-2026-12345"
+                  label={t('wizard.land.titleNo')}
+                  placeholder={t('wizard.land.titleNoPh')}
                   required
                   fullWidth
                   sx={{ maxWidth: 360 }}
@@ -175,8 +175,8 @@ export default function StepLand({ form }: WizardStepProps) {
                   value={field.value ?? ''}
                   label={
                     appType === 'MORTGAGE'
-                      ? 'Creditor (bank / lender)'
-                      : 'Creditor whose mortgage is being released'
+                      ? t('wizard.land.creditor')
+                      : t('wizard.land.creditorRelease')
                   }
                   required={appType === 'MORTGAGE'}
                   error={!!errors.mortgage?.creditor}
@@ -193,7 +193,7 @@ export default function StepLand({ form }: WizardStepProps) {
                   <TextField
                     {...field}
                     value={field.value ?? ''}
-                    label="Secured amount (FCFA)"
+                    label={t('wizard.land.amount')}
                     type="number"
                     slotProps={{ htmlInput: { min: 0 } }}
                     fullWidth
@@ -210,7 +210,7 @@ export default function StepLand({ form }: WizardStepProps) {
             {isCarveOut && (
               <Divider textAlign="left">
                 <Typography variant="caption" color="text.secondary">
-                  Description of the portion being acquired
+                  {t('wizard.land.portionDivider')}
                 </Typography>
               </Divider>
             )}
@@ -223,7 +223,7 @@ export default function StepLand({ form }: WizardStepProps) {
                 render={({ field }) => (
                   <TextField
                     {...field}
-                    label="Plot No."
+                    label={t('wizard.land.plotNo')}
                     required
                     error={!!errors.land?.plot_no}
                     helperText={errors.land?.plot_no?.message}
@@ -237,7 +237,7 @@ export default function StepLand({ form }: WizardStepProps) {
                 render={({ field }) => (
                   <TextField
                     {...field}
-                    label="Block No."
+                    label={t('wizard.land.blockNo')}
                     required
                     error={!!errors.land?.block_no}
                     helperText={errors.land?.block_no?.message}
@@ -251,7 +251,7 @@ export default function StepLand({ form }: WizardStepProps) {
                 render={({ field }) => (
                   <TextField
                     {...field}
-                    label="Sub-Division"
+                    label={t('wizard.land.subdivision')}
                     required
                     error={!!errors.land?.subdivision}
                     helperText={errors.land?.subdivision?.message}
@@ -265,7 +265,7 @@ export default function StepLand({ form }: WizardStepProps) {
                 render={({ field }) => (
                   <TextField
                     {...field}
-                    label="Division"
+                    label={t('wizard.land.division')}
                     required
                     error={!!errors.land?.division}
                     helperText={errors.land?.division?.message}
@@ -283,7 +283,7 @@ export default function StepLand({ form }: WizardStepProps) {
                 render={({ field }) => (
                   <TextField
                     {...field}
-                    label={isCarveOut ? 'Approx. area of the portion (m²)' : 'Area of Main Title (m²)'}
+                    label={isCarveOut ? t('wizard.land.areaPortion') : t('wizard.land.areaMain')}
                     type="number"
                     slotProps={{ htmlInput: { min: 0 } }}
                     fullWidth
@@ -296,7 +296,7 @@ export default function StepLand({ form }: WizardStepProps) {
                 render={({ field }) => (
                   <TextField
                     {...field}
-                    label="Area to Partition / Transfer (m²)"
+                    label={t('wizard.land.areaPartition')}
                     type="number"
                     slotProps={{ htmlInput: { min: 0 } }}
                     fullWidth
@@ -312,8 +312,8 @@ export default function StepLand({ form }: WizardStepProps) {
               render={({ field }) => (
                 <TextField
                   {...field}
-                  label="Locality / Place known as (Lieu-dit)"
-                  placeholder="e.g. Bonadikombo, Mile 4"
+                  label={t('wizard.land.locality')}
+                  placeholder={t('wizard.land.localityPh')}
                   fullWidth
                 />
               )}
@@ -324,8 +324,8 @@ export default function StepLand({ form }: WizardStepProps) {
               render={({ field }) => (
                 <TextField
                   {...field}
-                  label="Nature & Consistency of the Property"
-                  placeholder="e.g. Urban developed plot of regular shape"
+                  label={t('wizard.land.nature')}
+                  placeholder={t('wizard.land.naturePh')}
                   fullWidth
                 />
               )}
@@ -333,7 +333,7 @@ export default function StepLand({ form }: WizardStepProps) {
 
             <Divider textAlign="left">
               <Typography variant="caption" color="text.secondary">
-                Boundaries (Limites)
+                {t('wizard.land.boundaries')}
               </Typography>
             </Divider>
 
@@ -342,35 +342,35 @@ export default function StepLand({ form }: WizardStepProps) {
                 name="land.limit_north"
                 control={control}
                 render={({ field }) => (
-                  <TextField {...field} label="North (au Nord par)" fullWidth />
+                  <TextField {...field} label={t('wizard.land.north')} fullWidth />
                 )}
               />
               <Controller
                 name="land.limit_south"
                 control={control}
                 render={({ field }) => (
-                  <TextField {...field} label="South (au Sud par)" fullWidth />
+                  <TextField {...field} label={t('wizard.land.south')} fullWidth />
                 )}
               />
               <Controller
                 name="land.limit_east"
                 control={control}
                 render={({ field }) => (
-                  <TextField {...field} label="East (à l'Est par)" fullWidth />
+                  <TextField {...field} label={t('wizard.land.east')} fullWidth />
                 )}
               />
               <Controller
                 name="land.limit_west"
                 control={control}
                 render={({ field }) => (
-                  <TextField {...field} label="West (à l'Ouest par)" fullWidth />
+                  <TextField {...field} label={t('wizard.land.west')} fullWidth />
                 )}
               />
             </Box>
 
             <Divider textAlign="left">
               <Typography variant="caption" color="text.secondary">
-                Developments (Ce que supporte le terrain)
+                {t('wizard.land.developments')}
               </Typography>
             </Divider>
 
@@ -380,8 +380,8 @@ export default function StepLand({ form }: WizardStepProps) {
               render={({ field }) => (
                 <TextField
                   {...field}
-                  label="Existing Developments on the Land"
-                  placeholder="e.g. Dwelling house, cocoa plantation, permanent crops"
+                  label={t('wizard.land.developmentsLabel')}
+                  placeholder={t('wizard.land.developmentsPh')}
                   multiline
                   rows={2}
                   fullWidth
@@ -395,7 +395,7 @@ export default function StepLand({ form }: WizardStepProps) {
                 render={({ field }) => (
                   <TextField
                     {...field}
-                    label="Approx. Value of Investments (FCFA)"
+                    label={t('wizard.land.devValue')}
                     type="number"
                     slotProps={{ htmlInput: { min: 0 } }}
                     fullWidth
@@ -407,14 +407,14 @@ export default function StepLand({ form }: WizardStepProps) {
                 control={control}
                 render={({ field }) => (
                   <FormControl>
-                    <FormLabel>Is the land occupied by other persons?</FormLabel>
+                    <FormLabel>{t('wizard.land.othersOccupy')}</FormLabel>
                     <RadioGroup
                       row
                       value={field.value ?? ''}
                       onChange={(e) => field.onChange(e.target.value as 'yes' | 'no')}
                     >
-                      <FormControlLabel value="yes" control={<Radio />} label="Yes" />
-                      <FormControlLabel value="no" control={<Radio />} label="No" />
+                      <FormControlLabel value="yes" control={<Radio />} label={t('wizard.land.yes')} />
+                      <FormControlLabel value="no" control={<Radio />} label={t('wizard.land.no')} />
                     </RadioGroup>
                   </FormControl>
                 )}
@@ -429,14 +429,14 @@ export default function StepLand({ form }: WizardStepProps) {
               control={control}
               render={({ field }) => (
                 <FormControl>
-                  <FormLabel>Does the title have a layout plan?</FormLabel>
+                  <FormLabel>{t('wizard.land.hasLayoutPlan')}</FormLabel>
                   <RadioGroup
                     row
                     value={field.value ?? ''}
                     onChange={(e) => field.onChange(e.target.value as 'yes' | 'no')}
                   >
-                    <FormControlLabel value="yes" control={<Radio />} label="Yes" />
-                    <FormControlLabel value="no" control={<Radio />} label="No" />
+                    <FormControlLabel value="yes" control={<Radio />} label={t('wizard.land.yes')} />
+                    <FormControlLabel value="no" control={<Radio />} label={t('wizard.land.no')} />
                   </RadioGroup>
                 </FormControl>
               )}
@@ -448,14 +448,14 @@ export default function StepLand({ form }: WizardStepProps) {
                 control={control}
                 render={({ field }) => (
                   <FormControl sx={{ pl: 2 }}>
-                    <FormLabel>Is the layout plan approved?</FormLabel>
+                    <FormLabel>{t('wizard.land.planApproved')}</FormLabel>
                     <RadioGroup
                       row
                       value={field.value ?? ''}
                       onChange={(e) => field.onChange(e.target.value as 'yes' | 'no')}
                     >
-                      <FormControlLabel value="yes" control={<Radio />} label="Yes" />
-                      <FormControlLabel value="no" control={<Radio />} label="No" />
+                      <FormControlLabel value="yes" control={<Radio />} label={t('wizard.land.yes')} />
+                      <FormControlLabel value="no" control={<Radio />} label={t('wizard.land.no')} />
                     </RadioGroup>
                   </FormControl>
                 )}
@@ -467,7 +467,7 @@ export default function StepLand({ form }: WizardStepProps) {
             {/* Map pin selector */}
             <Box>
               <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 600 }}>
-                Locality (GPS Coordinates)
+                {t('wizard.land.gps')}
               </Typography>
               <MapPinSelector
                 lat={lat}
@@ -484,8 +484,7 @@ export default function StepLand({ form }: WizardStepProps) {
         {/* Direct types: nothing to describe — the register already knows the parcel */}
         {!needsLand && (
           <Typography variant="body2" color="text.secondary">
-            The parcel is already described in the Land Register under the title above — no land
-            description or survey is needed for this application type.
+            {t('wizard.land.noLandNeeded')}
           </Typography>
         )}
       </Box>

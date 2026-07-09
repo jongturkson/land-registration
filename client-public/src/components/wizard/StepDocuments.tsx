@@ -6,69 +6,34 @@ import {
   Add as AddIcon,
 } from '@mui/icons-material';
 import { useWatch } from 'react-hook-form';
+import { useTranslation } from 'react-i18next';
 import { type WizardStepProps } from '../../schemas/wizard.schema';
 
-const ID_CARD_DOC = {
-  key: 'id_card' as const,
-  label: 'National ID Card',
-  hint: 'Front and back scan or photograph of your valid ID card.',
-};
-
-const SITE_PLAN_DOC = {
-  key: 'site_plan' as const,
-  label: 'Site / Survey Plan',
-  hint: 'Certified copy of the existing or proposed survey plan.',
-};
-
-const ATTESTATION_DOC = {
-  key: 'attestation' as const,
-  label: 'Attestation of Ownership',
-  hint: 'Village chief attestation or equivalent proof of occupation.',
-};
-
-// Statutory extras per application type — required before submission
-const JUDGMENT_DOC = {
-  key: 'judgment' as const,
-  label: 'Court Judgment / Inheritance Certificate',
-  hint: 'The partition judgment or notarial inheritance certificate establishing the heirs and their shares. Required for partition applications.',
-};
-
-const NOTARIAL_ACT_DOC = {
-  key: 'notarial_act' as const,
-  label: 'Notarial Act (Acte Notarié)',
-  hint: 'The notarized deed of sale, transfer or mortgage. Private agreements have no legal effect on titled land.',
-};
-
-const RELEASE_DEED_DOC = {
-  key: 'release_deed' as const,
-  label: "Creditor's Release Deed (Mainlevée Notariée)",
-  hint: "The creditor's notarized deed confirming the secured debt is settled and consenting to the release of the mortgage.",
-};
-
+// Labels and hints live in i18n under wizard.docs.items.<key>
 type DocKey =
-  | typeof ID_CARD_DOC.key
-  | typeof SITE_PLAN_DOC.key
-  | typeof ATTESTATION_DOC.key
-  | typeof JUDGMENT_DOC.key
-  | typeof NOTARIAL_ACT_DOC.key
-  | typeof RELEASE_DEED_DOC.key;
+  | 'id_card'
+  | 'site_plan'
+  | 'attestation'
+  | 'judgment'
+  | 'notarial_act'
+  | 'release_deed';
 
 // Mirrors server/src/modules/applications/workflow.ts requiredDocTypes():
 // registrar-direct types operate on an already-surveyed parcel, so no site
 // plan or attestation is demanded for them.
-function docsForType(type: string | undefined) {
+function docsForType(type: string | undefined): DocKey[] {
   switch (type) {
     case 'PARTITION':
-      return [ID_CARD_DOC, SITE_PLAN_DOC, ATTESTATION_DOC, JUDGMENT_DOC];
+      return ['id_card', 'site_plan', 'attestation', 'judgment'];
     case 'PARTIAL_ALIENATION':
-      return [ID_CARD_DOC, SITE_PLAN_DOC, ATTESTATION_DOC, NOTARIAL_ACT_DOC];
+      return ['id_card', 'site_plan', 'attestation', 'notarial_act'];
     case 'TOTAL_ALIENATION':
     case 'MORTGAGE':
-      return [ID_CARD_DOC, NOTARIAL_ACT_DOC];
+      return ['id_card', 'notarial_act'];
     case 'MORTGAGE_RELEASE':
-      return [ID_CARD_DOC, RELEASE_DEED_DOC];
+      return ['id_card', 'release_deed'];
     default:
-      return [ID_CARD_DOC, SITE_PLAN_DOC, ATTESTATION_DOC];
+      return ['id_card', 'site_plan', 'attestation'];
   }
 }
 
@@ -77,12 +42,16 @@ function FileField({
   hint,
   fieldKey,
   initialName,
+  chooseLabel,
+  changeLabel,
   onFile,
 }: {
   label: string;
   hint: string;
   fieldKey: string;
   initialName: string | null;
+  chooseLabel: string;
+  changeLabel: string;
   onFile: (file: File | null) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -125,7 +94,7 @@ function FileField({
         {/* label wraps the Button so clicking triggers the file dialog */}
         <label htmlFor={fieldKey} style={{ cursor: 'pointer' }}>
           <Button component="span" variant="outlined" size="small" startIcon={<UploadFileIcon />}>
-            {filename ? 'Change File' : 'Choose File'}
+            {filename ? changeLabel : chooseLabel}
           </Button>
         </label>
 
@@ -148,6 +117,7 @@ function FileField({
 }
 
 export default function StepDocuments({ form }: WizardStepProps) {
+  const { t } = useTranslation();
   const { setValue, control } = form;
   const otherInputRef = useRef<HTMLInputElement>(null);
   const others = (useWatch({ control, name: 'documents.others' }) as File[] | undefined) ?? [];
@@ -178,32 +148,32 @@ export default function StepDocuments({ form }: WizardStepProps) {
   return (
     <Box>
       <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
-        Supporting Documents
+        {t('wizard.docs.title')}
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-        Upload scans or photographs of the required documents. Accepted formats: PDF, JPG, PNG.
+        {t('wizard.docs.subtitle')}
       </Typography>
       <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 3 }}>
         {appType === 'TOTAL_ALIENATION' || appType === 'MORTGAGE'
-          ? 'ID Card and the Notarial Act are required before you can submit — the parcel is already on the register, so no site plan is needed.'
+          ? t('wizard.docs.reqDirect')
           : appType === 'MORTGAGE_RELEASE'
-            ? "ID Card and the creditor's Release Deed are required before you can submit."
-            : 'ID Card and Site Plan are required before you can submit. Attestation is optional.'}
-        {appType === 'PARTITION' &&
-          ' Partition applications also require the court judgment or inheritance certificate.'}
-        {appType === 'PARTIAL_ALIENATION' &&
-          ' Partial alienations also require the notarial act (acte notarié).'}
+            ? t('wizard.docs.reqRelease')
+            : t('wizard.docs.reqDefault')}
+        {appType === 'PARTITION' && t('wizard.docs.reqPartition')}
+        {appType === 'PARTIAL_ALIENATION' && t('wizard.docs.reqPartial')}
       </Typography>
 
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {requiredDocs.map(({ key, label, hint }) => {
+        {requiredDocs.map((key) => {
           const existing = docValues?.[key];
           return (
             <FileField
               key={key}
               fieldKey={key}
-              label={label}
-              hint={hint}
+              label={t(`wizard.docs.items.${key}.label`)}
+              hint={t(`wizard.docs.items.${key}.hint`)}
+              chooseLabel={t('wizard.docs.chooseFile')}
+              changeLabel={t('wizard.docs.changeFile')}
               initialName={existing instanceof File ? existing.name : null}
               onFile={(file) => handleFile(key, file)}
             />
@@ -217,11 +187,10 @@ export default function StepDocuments({ form }: WizardStepProps) {
       <Paper variant="outlined" sx={{ p: 2.5, display: 'flex', flexDirection: 'column', gap: 1 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <UploadFileIcon color="action" fontSize="small" />
-          <Typography sx={{ fontWeight: 600 }}>Other Supporting Documents</Typography>
+          <Typography sx={{ fontWeight: 600 }}>{t('wizard.docs.others')}</Typography>
         </Box>
         <Typography variant="caption" color="text.secondary">
-          Optionally attach any additional documents — land agreement, tax receipts, sworn
-          declarations, photographs, etc. You can add as many as you need.
+          {t('wizard.docs.othersHint')}
         </Typography>
 
         <Box sx={{ mt: 0.5 }}>
@@ -236,7 +205,7 @@ export default function StepDocuments({ form }: WizardStepProps) {
           />
           <label htmlFor="other-docs" style={{ cursor: 'pointer' }}>
             <Button component="span" variant="outlined" size="small" startIcon={<AddIcon />}>
-              Add Document(s)
+              {t('wizard.docs.addDocs')}
             </Button>
           </label>
         </Box>

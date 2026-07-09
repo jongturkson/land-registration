@@ -20,6 +20,7 @@ import {
   Download as DownloadIcon,
   Search as SearchIcon,
 } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 import api from '../lib/api';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -43,34 +44,7 @@ interface MyApplication {
   issued_title: { id: string; title_no: string; has_certificate: boolean } | null;
 }
 
-// ─── Lookup tables ──────────────────────────────────────────────────────────
-
-const TYPE_LABELS: Record<string, string> = {
-  DIRECT_REGISTRATION: 'Direct Registration',
-  PARTIAL_ALIENATION: 'Partial Alienation (Morcellement)',
-  TOTAL_ALIENATION: 'Total Alienation (Mutation Totale)',
-  STATE_LAND: 'State Land Concession',
-  PARTITION: 'Partition (Partage)',
-  MORTGAGE: 'Mortgage (Hypothèque)',
-  MORTGAGE_RELEASE: 'Mortgage Release (Mainlevée)',
-  TRANSFORMATION: 'Transformation',
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  DRAFT: 'Draft',
-  SUBMITTED: 'Submitted',
-  RECEIPTED: 'Récépissé Issued',
-  PUBLISHED: 'Public Notice',
-  SURVEY_ORDERED: 'Survey Commissioned',
-  SURVEYED: 'Surveyed',
-  REGIONAL_REVIEW: 'Regional Review',
-  OPPOSITION_WINDOW: '30-Day Opposition Window',
-  CLEARED: 'Cleared',
-  TITLE_ISSUED: 'Title Issued',
-  COMPLETED: 'Registered',
-  QUERIED: 'Query — Action Needed',
-  REJECTED: 'Rejected',
-};
+// Type and status labels live in i18n under track.types.* and myApps.statuses.*
 
 type ChipColor = 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning';
 
@@ -90,19 +64,21 @@ function statusColor(status: string): ChipColor {
   }
 }
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-GB', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
-}
-
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export default function MyApplications() {
+  const { t, i18n } = useTranslation();
+  const dateLocale = i18n.language.startsWith('fr') ? 'fr-FR' : 'en-GB';
   const [openId, setOpenId] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+
+  function formatDate(iso: string): string {
+    return new Date(iso).toLocaleDateString(dateLocale, {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
+  }
 
   const { data: applications, isLoading, isError } = useQuery({
     queryKey: ['my-applications'],
@@ -113,7 +89,9 @@ export default function MyApplications() {
     if (!app.issued_title) return;
     setDownloadError(null);
     try {
-      const res = await api.get(`/applications/${app.id}/certificate`, { responseType: 'blob' });
+      const res = await api.get(`/applications/${app.id}/certificate`, {
+        responseType: 'blob',
+      });
       const url = URL.createObjectURL(res.data as Blob);
       const anchor = document.createElement('a');
       anchor.href = url;
@@ -123,7 +101,7 @@ export default function MyApplications() {
       document.body.removeChild(anchor);
       URL.revokeObjectURL(url);
     } catch {
-      setDownloadError('Failed to download the certificate. Please try again.');
+      setDownloadError(t('myApps.downloadError'));
     }
   }
 
@@ -136,26 +114,25 @@ export default function MyApplications() {
   }
 
   return (
-    <Container maxWidth="md" sx={{ py: 5 }}>
+    <Container maxWidth="md" sx={{ py: { xs: 3, md: 5 }, px: { xs: 2, sm: 3 } }}>
       <Typography variant="overline" color="text.secondary">
-        Republic of Cameroon — Land Registration Portal
+        {t('myApps.overline')}
       </Typography>
       <Typography
         variant="h4"
         component="h1"
         gutterBottom
-        sx={{ fontFamily: "'Lora', serif", fontWeight: 700 }}
+        sx={{ fontFamily: "'Lora', serif", fontWeight: 700, fontSize: { xs: '1.7rem', md: '2.1rem' } }}
       >
-        My Applications
+        {t('myApps.title')}
       </Typography>
       <Typography variant="body1" color="text.secondary" sx={{ mb: 4 }}>
-        Every application you have filed, its progress through the offices, the reasons behind
-        any query or rejection — and your Land Certificate once it is issued.
+        {t('myApps.subtitle')}
       </Typography>
 
       {isError && (
         <Alert severity="error" sx={{ mb: 3 }}>
-          Unable to load your applications right now. Please try again shortly.
+          {t('myApps.loadError')}
         </Alert>
       )}
       {downloadError && (
@@ -167,10 +144,10 @@ export default function MyApplications() {
       {applications && applications.length === 0 && (
         <Paper elevation={1} sx={{ p: 4, textAlign: 'center' }}>
           <Typography variant="body1" sx={{ mb: 2 }}>
-            You have not filed any application yet.
+            {t('myApps.empty')}
           </Typography>
           <Button component={Link} to="/apply" variant="contained">
-            Start an Application
+            {t('myApps.emptyCta')}
           </Button>
         </Paper>
       )}
@@ -198,16 +175,18 @@ export default function MyApplications() {
               >
                 <Box sx={{ flexGrow: 1, minWidth: 220 }}>
                   <Typography sx={{ fontWeight: 700, fontFamily: "'IBM Plex Mono', monospace" }}>
-                    {app.reference_no ?? '(draft — not yet submitted)'}
+                    {app.reference_no ?? t('myApps.draftRef')}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    {TYPE_LABELS[app.type] ?? app.type}
-                    {app.source_title_no ? ` · on title ${app.source_title_no}` : ''} · filed{' '}
-                    {formatDate(app.created_at)}
+                    {t(`track.types.${app.type}`, { defaultValue: app.type })}
+                    {app.source_title_no
+                      ? ` · ${t('myApps.onTitle', { titleNo: app.source_title_no })}`
+                      : ''}{' '}
+                    · {t('myApps.filed', { date: formatDate(app.created_at) })}
                   </Typography>
                 </Box>
                 <Chip
-                  label={STATUS_LABELS[app.status] ?? app.status}
+                  label={t(`myApps.statuses.${app.status}`, { defaultValue: app.status })}
                   color={statusColor(app.status)}
                   sx={{ fontWeight: 700 }}
                 />
@@ -219,7 +198,7 @@ export default function MyApplications() {
                     to={`/track?ref=${encodeURIComponent(app.reference_no)}`}
                     startIcon={<SearchIcon />}
                   >
-                    Track
+                    {t('myApps.trackBtn')}
                   </Button>
                 )}
                 <IconButton size="small" onClick={() => setOpenId(open ? null : app.id)}>
@@ -234,7 +213,9 @@ export default function MyApplications() {
                   sx={{ mt: 1.5 }}
                 >
                   <strong>
-                    {app.status === 'REJECTED' ? 'Reason for rejection:' : 'What needs correcting:'}
+                    {app.status === 'REJECTED'
+                      ? t('myApps.rejectionReason')
+                      : t('myApps.correctionNeeded')}
                   </strong>{' '}
                   {attention.decision}
                 </Alert>
@@ -251,12 +232,12 @@ export default function MyApplications() {
                         startIcon={<DownloadIcon />}
                         onClick={() => void handleDownloadCertificate(app)}
                       >
-                        Download Certificate
+                        {t('myApps.downloadCert')}
                       </Button>
                     ) : undefined
                   }
                 >
-                  Land Certificate <strong>{app.issued_title.title_no}</strong> has been issued.
+                  {t('myApps.certIssued', { titleNo: app.issued_title.title_no })}
                 </Alert>
               )}
 
@@ -264,11 +245,11 @@ export default function MyApplications() {
               <Collapse in={open}>
                 <Divider sx={{ my: 2 }} />
                 <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
-                  Processing History
+                  {t('myApps.historyTitle')}
                 </Typography>
                 {app.approvals.length === 0 ? (
                   <Typography variant="body2" color="text.secondary">
-                    No processing steps recorded yet — the file is awaiting its first review.
+                    {t('myApps.noSteps')}
                   </Typography>
                 ) : (
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>

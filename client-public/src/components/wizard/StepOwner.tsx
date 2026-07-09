@@ -12,19 +12,21 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 import { type WizardStepProps } from '../../schemas/wizard.schema';
 
 export default function StepOwner({ form }: WizardStepProps) {
+  const { t } = useTranslation();
   const { control, formState: { errors } } = form;
   const actingOnBehalf = useWatch({ control, name: 'owner.acting_on_behalf' });
 
   return (
     <Box>
       <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
-        Owner Details
+        {t('wizard.owner.title')}
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Enter the details of the person in whose name the title will be registered.
+        {t('wizard.owner.subtitle')}
       </Typography>
 
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
@@ -36,7 +38,7 @@ export default function StepOwner({ form }: WizardStepProps) {
             render={({ field }) => (
               <TextField
                 {...field}
-                label="Full Name & Surname"
+                label={t('wizard.owner.fullName')}
                 required
                 error={!!errors.owner?.full_name}
                 helperText={errors.owner?.full_name?.message}
@@ -50,7 +52,7 @@ export default function StepOwner({ form }: WizardStepProps) {
             render={({ field }) => (
               <TextField
                 {...field}
-                label="National ID Card No."
+                label={t('wizard.owner.idCardNo')}
                 required
                 error={!!errors.owner?.id_card_no}
                 helperText={errors.owner?.id_card_no?.message}
@@ -67,7 +69,7 @@ export default function StepOwner({ form }: WizardStepProps) {
           render={({ field }) => (
             <TextField
               {...field}
-              label="Complete Address"
+              label={t('wizard.owner.address')}
               required
               multiline
               rows={2}
@@ -85,7 +87,7 @@ export default function StepOwner({ form }: WizardStepProps) {
           render={({ field }) => (
             <TextField
               {...field}
-              label="ID Card Delivered On"
+              label={t('wizard.owner.idDeliveredOn')}
               type="date"
               required
               slotProps={{ inputLabel: { shrink: true } }}
@@ -98,7 +100,7 @@ export default function StepOwner({ form }: WizardStepProps) {
 
         <Divider textAlign="left">
           <Typography variant="caption" color="text.secondary">
-            Civil Status (État civil du propriétaire)
+            {t('wizard.owner.civilStatus')}
           </Typography>
         </Divider>
 
@@ -108,14 +110,14 @@ export default function StepOwner({ form }: WizardStepProps) {
             name="owner.father_name"
             control={control}
             render={({ field }) => (
-              <TextField {...field} label="Father's Name (Fils/Fille de)" fullWidth />
+              <TextField {...field} label={t('wizard.owner.fatherName')} fullWidth />
             )}
           />
           <Controller
             name="owner.mother_name"
             control={control}
             render={({ field }) => (
-              <TextField {...field} label="Mother's Name (et de)" fullWidth />
+              <TextField {...field} label={t('wizard.owner.motherName')} fullWidth />
             )}
           />
         </Box>
@@ -125,7 +127,7 @@ export default function StepOwner({ form }: WizardStepProps) {
           <Controller
             name="owner.birth_place"
             control={control}
-            render={({ field }) => <TextField {...field} label="Place of Birth" fullWidth />}
+            render={({ field }) => <TextField {...field} label={t('wizard.owner.birthPlace')} fullWidth />}
           />
           <Controller
             name="owner.birth_date"
@@ -133,7 +135,7 @@ export default function StepOwner({ form }: WizardStepProps) {
             render={({ field }) => (
               <TextField
                 {...field}
-                label="Date of Birth"
+                label={t('wizard.owner.birthDate')}
                 type="date"
                 slotProps={{ inputLabel: { shrink: true } }}
                 fullWidth
@@ -144,13 +146,18 @@ export default function StepOwner({ form }: WizardStepProps) {
             name="owner.nationality"
             control={control}
             render={({ field }) => (
-              <TextField {...field} label="Nationality" placeholder="e.g. Cameroonian" fullWidth />
+              <TextField
+                {...field}
+                label={t('wizard.owner.nationality')}
+                placeholder={t('wizard.owner.nationalityPh')}
+                fullWidth
+              />
             )}
           />
           <Controller
             name="owner.profession"
             control={control}
-            render={({ field }) => <TextField {...field} label="Profession / Occupation" fullWidth />}
+            render={({ field }) => <TextField {...field} label={t('wizard.owner.profession')} fullWidth />}
           />
         </Box>
 
@@ -161,17 +168,17 @@ export default function StepOwner({ form }: WizardStepProps) {
             control={control}
             render={({ field }) => (
               <FormControl fullWidth>
-                <InputLabel id="marital-status-label">Marital Status</InputLabel>
+                <InputLabel id="marital-status-label">{t('wizard.owner.maritalStatus')}</InputLabel>
                 <Select
                   labelId="marital-status-label"
-                  label="Marital Status"
+                  label={t('wizard.owner.maritalStatus')}
                   value={field.value ?? ''}
                   onChange={field.onChange}
                 >
-                  <MenuItem value="SINGLE">Single</MenuItem>
-                  <MenuItem value="MARRIED">Married</MenuItem>
-                  <MenuItem value="WIDOWED">Widowed</MenuItem>
-                  <MenuItem value="DIVORCED">Divorced</MenuItem>
+                  <MenuItem value="SINGLE">{t('wizard.owner.single')}</MenuItem>
+                  <MenuItem value="MARRIED">{t('wizard.owner.married')}</MenuItem>
+                  <MenuItem value="WIDOWED">{t('wizard.owner.widowed')}</MenuItem>
+                  <MenuItem value="DIVORCED">{t('wizard.owner.divorced')}</MenuItem>
                 </Select>
               </FormControl>
             )}
@@ -181,15 +188,17 @@ export default function StepOwner({ form }: WizardStepProps) {
             control={control}
             render={({ field }) => (
               <FormControl fullWidth>
-                <InputLabel id="matrimonial-regime-label">Matrimonial Regime</InputLabel>
+                <InputLabel id="matrimonial-regime-label">
+                  {t('wizard.owner.matrimonialRegime')}
+                </InputLabel>
                 <Select
                   labelId="matrimonial-regime-label"
-                  label="Matrimonial Regime"
+                  label={t('wizard.owner.matrimonialRegime')}
                   value={field.value ?? ''}
                   onChange={field.onChange}
                 >
-                  <MenuItem value="COMMUNITY">Community of Property</MenuItem>
-                  <MenuItem value="SEPARATION">Separation of Property</MenuItem>
+                  <MenuItem value="COMMUNITY">{t('wizard.owner.community')}</MenuItem>
+                  <MenuItem value="SEPARATION">{t('wizard.owner.separation')}</MenuItem>
                 </Select>
               </FormControl>
             )}
@@ -210,7 +219,7 @@ export default function StepOwner({ form }: WizardStepProps) {
                   onChange={(e) => field.onChange(e.target.checked)}
                 />
               }
-              label="I am acting on behalf of someone else (mandataire)"
+              label={t('wizard.owner.actingOnBehalf')}
             />
           )}
         />
@@ -227,7 +236,7 @@ export default function StepOwner({ form }: WizardStepProps) {
             }}
           >
             <Typography variant="subtitle2" color="text.secondary">
-              Details of the person being represented
+              {t('wizard.owner.behalfTitle')}
             </Typography>
             <Box
               sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}
@@ -238,7 +247,7 @@ export default function StepOwner({ form }: WizardStepProps) {
                 render={({ field }) => (
                   <TextField
                     {...field}
-                    label="Full Name"
+                    label={t('wizard.owner.behalfName')}
                     error={!!errors.owner?.behalf_name}
                     helperText={errors.owner?.behalf_name?.message}
                     fullWidth
@@ -251,7 +260,7 @@ export default function StepOwner({ form }: WizardStepProps) {
                 render={({ field }) => (
                   <TextField
                     {...field}
-                    label="ID Card No."
+                    label={t('wizard.owner.behalfId')}
                     error={!!errors.owner?.behalf_id}
                     helperText={errors.owner?.behalf_id?.message}
                     fullWidth
@@ -265,7 +274,7 @@ export default function StepOwner({ form }: WizardStepProps) {
               render={({ field }) => (
                 <TextField
                   {...field}
-                  label="Address"
+                  label={t('wizard.owner.behalfAddress')}
                   multiline
                   rows={2}
                   error={!!errors.owner?.behalf_address}

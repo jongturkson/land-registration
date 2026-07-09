@@ -14,8 +14,11 @@ import {
   Stepper,
   TextField,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
+import { useTranslation } from 'react-i18next';
 import axios from 'axios';
 import api from '../lib/api';
 
@@ -29,17 +32,6 @@ interface TrackedApplication {
   approvals: { step: string; signed_at: string }[];
 }
 
-const TYPE_LABELS: Record<string, string> = {
-  DIRECT_REGISTRATION: 'Direct Registration (Immatriculation Directe)',
-  PARTIAL_ALIENATION: 'Partial Alienation (Morcellement)',
-  TOTAL_ALIENATION: 'Total Alienation (Mutation Totale)',
-  STATE_LAND: 'State Land Concession',
-  PARTITION: 'Property Partition (Partage)',
-  MORTGAGE: 'Mortgage Inscription (Hypothèque)',
-  MORTGAGE_RELEASE: 'Mortgage Release (Mainlevée)',
-  TRANSFORMATION: 'Transformation',
-};
-
 // ── Statutory track per application type (mirrors the server state machine) ──
 
 const CARVE_OUT_TYPES = new Set(['PARTIAL_ALIENATION', 'PARTITION']);
@@ -47,84 +39,82 @@ const DIRECT_TYPES = new Set(['TOTAL_ALIENATION', 'MORTGAGE', 'MORTGAGE_RELEASE'
 
 interface JourneyStep {
   status: string;
-  label: string;
+  labelKey: string; // key under track.steps.*
   phase: 1 | 2;
 }
 
 const FULL_STEPS: JourneyStep[] = [
-  { status: 'SUBMITTED', label: 'Submitted', phase: 1 },
-  { status: 'RECEIPTED', label: 'Récépissé Issued', phase: 1 },
-  { status: 'PUBLISHED', label: 'Public Notice', phase: 1 },
-  { status: 'SURVEYED', label: 'Land Surveyed (Bornage)', phase: 1 },
-  { status: 'REGIONAL_REVIEW', label: 'Regional Review', phase: 2 },
-  { status: 'OPPOSITION_WINDOW', label: '30-Day Opposition Window', phase: 2 },
-  { status: 'CLEARED', label: 'Cleared', phase: 2 },
-  { status: 'TITLE_ISSUED', label: 'Title Issued', phase: 2 },
+  { status: 'SUBMITTED', labelKey: 'submitted', phase: 1 },
+  { status: 'RECEIPTED', labelKey: 'receipted', phase: 1 },
+  { status: 'PUBLISHED', labelKey: 'published', phase: 1 },
+  { status: 'SURVEYED', labelKey: 'surveyed', phase: 1 },
+  { status: 'REGIONAL_REVIEW', labelKey: 'regionalReview', phase: 2 },
+  { status: 'OPPOSITION_WINDOW', labelKey: 'oppositionWindow', phase: 2 },
+  { status: 'CLEARED', labelKey: 'cleared', phase: 2 },
+  { status: 'TITLE_ISSUED', labelKey: 'titleIssued', phase: 2 },
 ];
 
 function stepsFor(type: string): JourneyStep[] {
   if (DIRECT_TYPES.has(type)) {
     return [
-      { status: 'SUBMITTED', label: 'Submitted to Registrar', phase: 2 },
-      { status: 'CLEARED', label: 'Deed Verified', phase: 2 },
-      { status: 'COMPLETED', label: 'Registered in Livre Foncier', phase: 2 },
+      { status: 'SUBMITTED', labelKey: 'submittedRegistrar', phase: 2 },
+      { status: 'CLEARED', labelKey: 'deedVerified', phase: 2 },
+      { status: 'COMPLETED', labelKey: 'registered', phase: 2 },
     ];
   }
   if (CARVE_OUT_TYPES.has(type)) {
     return [
-      { status: 'SUBMITTED', label: 'Submitted to Registrar', phase: 2 },
-      { status: 'SURVEY_ORDERED', label: 'Survey Commissioned', phase: 1 },
-      { status: 'SURVEYED', label: 'Child Parcel Demarcated', phase: 1 },
-      { status: 'CLEARED', label: 'Cleared', phase: 2 },
-      { status: 'TITLE_ISSUED', label: 'Child Title Issued', phase: 2 },
+      { status: 'SUBMITTED', labelKey: 'submittedRegistrar', phase: 2 },
+      { status: 'SURVEY_ORDERED', labelKey: 'surveyOrdered', phase: 1 },
+      { status: 'SURVEYED', labelKey: 'childDemarcated', phase: 1 },
+      { status: 'CLEARED', labelKey: 'cleared', phase: 2 },
+      { status: 'TITLE_ISSUED', labelKey: 'childTitleIssued', phase: 2 },
     ];
   }
   return FULL_STEPS;
 }
 
-// Citizen-facing guidance: what is happening now and what to expect next
-function nextStepText(type: string, status: string): string {
+// Citizen-facing guidance key (under track.next.*) for the current stage
+function nextStepKey(type: string, status: string): string {
   const direct = DIRECT_TYPES.has(type);
   const carveOut = CARVE_OUT_TYPES.has(type);
   switch (status) {
     case 'SUBMITTED':
-      return direct || carveOut
-        ? 'Your file is on the desk of the Land Registrar (Conservateur Foncier), who will verify your deed against the existing title. No action is needed from you.'
-        : 'Your file is with the Sub-Divisional Office, which will verify it and issue your official receipt (Récépissé). No action is needed from you.';
+      return direct || carveOut ? 'submittedRegistrar' : 'submittedSdo';
     case 'RECEIPTED':
-      return 'Your Récépissé has been issued. The SDO will now order the public notice and convene the Consultative Commission for the site visit.';
+      return 'receipted';
     case 'PUBLISHED':
-      return 'A public notice about your application has been posted. Next: the Consultative Commission will visit your land and the sworn surveyor will demarcate the boundaries (bornage). Please be available to attend.';
+      return 'published';
     case 'SURVEY_ORDERED':
-      return 'The Registrar has verified your deed and commissioned the survey. The sworn surveyor will demarcate your portion inside the mother title boundary — please be available to attend.';
+      return 'surveyOrdered';
     case 'SURVEYED':
-      return carveOut
-        ? 'Your portion has been demarcated inside the mother title. The Registrar will now verify the survey and clear the file for your new title.'
-        : 'Your land has been surveyed. The dossier is being assembled and forwarded to the Regional Delegation for review.';
+      return carveOut ? 'surveyedCarveOut' : 'surveyedFull';
     case 'REGIONAL_REVIEW':
-      return 'Your dossier is under regional review. Once approved, a 30-day public opposition window opens — this is a legal requirement for first registrations.';
+      return 'regionalReview';
     case 'OPPOSITION_WINDOW':
-      return 'The 30-day opposition window is open. Anyone claiming a right over the land may file an opposition during this period. If none is upheld, your file will be cleared.';
+      return 'oppositionWindow';
     case 'CLEARED':
-      return direct
-        ? 'Your deed is verified. The Land Registrar will now execute the entry (transfer, mortgage or release) on the existing title.'
-        : carveOut
-          ? 'Your file is cleared. The Land Registrar will now issue your new title and reduce the mother parcel accordingly.'
-          : 'Your file is cleared. The Land Registrar (Conservateur Foncier) will now enter the parcel in the Land Register and issue your Land Certificate.';
+      return direct ? 'clearedDirect' : carveOut ? 'clearedCarveOut' : 'clearedFull';
     case 'TITLE_ISSUED':
-      return 'Congratulations — your Land Certificate (Titre Foncier) has been issued. Sign in and open My Applications to download it, or collect your copy at the Divisional Registry, Buea.';
+      return 'titleIssued';
     case 'COMPLETED':
-      return 'Done — the entry has been executed on the title in the Land Register. The updated title can be confirmed at any time through the public verification portal.';
+      return 'completed';
     case 'QUERIED':
-      return 'An officer has raised a query on your file. Sign in and open My Applications to read exactly what needs correcting, or contact the Divisional Registry, Buea, with your Récépissé.';
+      return 'queried';
     case 'REJECTED':
-      return 'Your application was rejected. Sign in and open My Applications to read the grounds, or contact the Divisional Registry, Buea, with your Récépissé.';
+      return 'rejected';
     default:
       return '';
   }
 }
 
 export default function TrackApplication() {
+  const { t, i18n } = useTranslation();
+  const dateLocale = i18n.language.startsWith('fr') ? 'fr-FR' : 'en-GB';
+  const theme = useTheme();
+  // Horizontal steppers with up to 8 steps are unreadable on phones
+  const isPhone = useMediaQuery(theme.breakpoints.down('sm'));
+
   const [searchParams, setSearchParams] = useSearchParams();
   const initialRef = searchParams.get('ref') ?? '';
   const [reference, setReference] = useState(initialRef);
@@ -146,9 +136,9 @@ export default function TrackApplication() {
       setSearchParams({ ref: trimmed }, { replace: true });
     } catch (err: unknown) {
       if (axios.isAxiosError(err) && err.response?.status === 404) {
-        setError('No application found for that reference number. Check your Récépissé and try again.');
+        setError(t('track.notFound'));
       } else {
-        setError('Unable to check your application right now. Please try again shortly.');
+        setError(t('track.generic'));
       }
     } finally {
       setLoading(false);
@@ -160,21 +150,20 @@ export default function TrackApplication() {
   const halted = result?.status === 'QUERIED' || result?.status === 'REJECTED';
 
   return (
-    <Container maxWidth="md" sx={{ py: 5 }}>
+    <Container maxWidth="md" sx={{ py: { xs: 3, md: 5 }, px: { xs: 2, sm: 3 } }}>
       <Typography variant="overline" color="text.secondary">
-        Republic of Cameroon — Divisional Registry, Buea
+        {t('track.overline')}
       </Typography>
       <Typography
         variant="h4"
         component="h1"
         gutterBottom
-        sx={{ fontFamily: "'Lora', serif", fontWeight: 700 }}
+        sx={{ fontFamily: "'Lora', serif", fontWeight: 700, fontSize: { xs: '1.7rem', md: '2.1rem' } }}
       >
-        Track Your Application
+        {t('track.title')}
       </Typography>
       <Typography variant="body1" color="text.secondary" sx={{ mb: 4 }}>
-        Enter the reference number printed on your Récépissé to see exactly where your file is
-        in the registration journey — and what happens next.
+        {t('track.subtitle')}
       </Typography>
 
       <Paper
@@ -184,15 +173,22 @@ export default function TrackApplication() {
           e.preventDefault();
           void handleTrack(reference);
         }}
-        sx={{ p: 3, display: 'flex', gap: 2, alignItems: 'flex-start', flexWrap: 'wrap', mb: 3 }}
+        sx={{
+          p: { xs: 2, sm: 3 },
+          display: 'flex',
+          gap: 2,
+          alignItems: 'stretch',
+          flexDirection: { xs: 'column', sm: 'row' },
+          mb: 3,
+        }}
       >
         <TextField
-          label="Récépissé Reference Number"
-          placeholder="e.g. APP-2026-123456"
+          label={t('track.refLabel')}
+          placeholder={t('track.refPlaceholder')}
           value={reference}
           onChange={(e) => setReference(e.target.value)}
-          sx={{ flex: 1, minWidth: 240 }}
-          slotProps={{ htmlInput: { 'aria-label': 'Reference number' } }}
+          sx={{ flex: 1 }}
+          slotProps={{ htmlInput: { 'aria-label': t('track.refLabel') } }}
         />
         <Button
           type="submit"
@@ -201,7 +197,7 @@ export default function TrackApplication() {
           disabled={loading || !reference.trim()}
           startIcon={loading ? <CircularProgress size={16} color="inherit" /> : <SearchIcon />}
         >
-          {loading ? 'Checking…' : 'Track'}
+          {loading ? t('track.checking') : t('track.submit')}
         </Button>
       </Paper>
 
@@ -227,17 +223,25 @@ export default function TrackApplication() {
               {result.reference_no}
             </Typography>
             <Chip
-              label={halted ? (result.status === 'REJECTED' ? 'Rejected' : 'Query Raised') : 'In Progress'}
+              label={
+                halted
+                  ? result.status === 'REJECTED'
+                    ? t('track.rejected')
+                    : t('track.queried')
+                  : t('track.inProgress')
+              }
               color={result.status === 'REJECTED' ? 'error' : halted ? 'warning' : 'primary'}
               sx={{ fontWeight: 700 }}
             />
           </Box>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-            {TYPE_LABELS[result.type] ?? result.type} · filed on{' '}
-            {new Date(result.created_at).toLocaleDateString('en-GB', {
-              day: '2-digit',
-              month: 'long',
-              year: 'numeric',
+            {t(`track.types.${result.type}`, { defaultValue: result.type })} ·{' '}
+            {t('track.filedOn', {
+              date: new Date(result.created_at).toLocaleDateString(dateLocale, {
+                day: '2-digit',
+                month: 'long',
+                year: 'numeric',
+              }),
             })}
           </Typography>
 
@@ -245,14 +249,15 @@ export default function TrackApplication() {
             <>
               <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary' }}>
                 {DIRECT_TYPES.has(result.type)
-                  ? 'REGISTRAR-DIRECT — ENTRY ON THE EXISTING TITLE'
+                  ? t('track.trackKinds.direct')
                   : CARVE_OUT_TYPES.has(result.type)
-                    ? 'REGISTRAR-LED CARVE-OUT (MORCELLEMENT)'
-                    : 'PHASE I — ESTABLISHING THE GROUND TRUTH · PHASE II — REGISTRATION'}
+                    ? t('track.trackKinds.carveOut')
+                    : t('track.trackKinds.full')}
               </Typography>
               <Stepper
                 activeStep={currentIndex === -1 ? 0 : currentIndex}
-                alternativeLabel
+                orientation={isPhone ? 'vertical' : 'horizontal'}
+                alternativeLabel={!isPhone}
                 sx={{ my: 3 }}
               >
                 {steps.map((s, i) => (
@@ -260,11 +265,11 @@ export default function TrackApplication() {
                     <StepLabel
                       optional={
                         <Typography variant="caption" color="text.secondary">
-                          Phase {s.phase === 1 ? 'I' : 'II'}
+                          {t('track.phase', { num: s.phase === 1 ? 'I' : 'II' })}
                         </Typography>
                       }
                     >
-                      {s.label}
+                      {t(`track.steps.${s.labelKey}`)}
                     </StepLabel>
                   </Step>
                 ))}
@@ -274,7 +279,7 @@ export default function TrackApplication() {
           )}
 
           <Alert severity={result.status === 'REJECTED' ? 'error' : halted ? 'warning' : 'info'}>
-            {nextStepText(result.type, result.status)}
+            {t(`track.next.${nextStepKey(result.type, result.status)}`)}
           </Alert>
 
           {/* Processing history — the steps already taken by the offices */}
@@ -282,11 +287,19 @@ export default function TrackApplication() {
             <>
               <Divider sx={{ my: 3 }} />
               <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.5 }}>
-                Processing History
+                {t('track.historyTitle')}
               </Typography>
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
                 {result.approvals.map((a, i) => (
-                  <Box key={i} sx={{ display: 'flex', gap: 2, alignItems: 'baseline' }}>
+                  <Box
+                    key={i}
+                    sx={{
+                      display: 'flex',
+                      gap: { xs: 1, sm: 2 },
+                      alignItems: 'baseline',
+                      flexWrap: 'wrap',
+                    }}
+                  >
                     <Typography
                       variant="caption"
                       sx={{
@@ -295,7 +308,7 @@ export default function TrackApplication() {
                         minWidth: 96,
                       }}
                     >
-                      {new Date(a.signed_at).toLocaleDateString('en-GB', {
+                      {new Date(a.signed_at).toLocaleDateString(dateLocale, {
                         day: '2-digit',
                         month: 'short',
                         year: 'numeric',

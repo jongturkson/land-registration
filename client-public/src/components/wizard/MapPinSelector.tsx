@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { useTranslation } from 'react-i18next';
 import { Box, Typography } from '@mui/material';
 
 // Avoid broken-image marker by using an inline SVG div-icon
@@ -24,6 +25,7 @@ type Props = {
 const DEFAULT_CENTER: [number, number] = [4.154, 9.242];
 
 export default function MapPinSelector({ lat, lng, onChange }: Props) {
+  const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
@@ -80,7 +82,7 @@ export default function MapPinSelector({ lat, lng, onChange }: Props) {
   return (
     <Box>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-        Click on the map to pin the approximate locality of the land.
+        {t('wizard.map.hint')}
       </Typography>
       <Box
         ref={containerRef}
@@ -95,7 +97,7 @@ export default function MapPinSelector({ lat, lng, onChange }: Props) {
       />
       {lat !== undefined && lng !== undefined && (
         <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
-          Pinned: {lat.toFixed(5)}, {lng.toFixed(5)}
+          {t('wizard.map.pinned')}: {lat.toFixed(5)}, {lng.toFixed(5)}
         </Typography>
       )}
     </Box>

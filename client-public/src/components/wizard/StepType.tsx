@@ -1,17 +1,19 @@
 import { Controller } from 'react-hook-form';
+import { useTranslation } from 'react-i18next';
 import { Box, Card, CardActionArea, CardContent, Typography } from '@mui/material';
 import { APP_TYPES, type WizardStepProps } from '../../schemas/wizard.schema';
 
 export default function StepType({ form }: WizardStepProps) {
+  const { t } = useTranslation();
   const { control, formState: { errors } } = form;
 
   return (
     <Box>
       <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
-        Select Application Type
+        {t('wizard.typeStep.title')}
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Choose the type of land registration that matches your request.
+        {t('wizard.typeStep.subtitle')}
       </Typography>
 
       <Controller
@@ -28,6 +30,8 @@ export default function StepType({ form }: WizardStepProps) {
             >
               {APP_TYPES.map(({ value, label, desc }) => {
                 const selected = field.value === value;
+                const cardLabel = t(`wizard.types.${value}.label`, { defaultValue: label });
+                const cardDesc = t(`wizard.types.${value}.desc`, { defaultValue: desc });
                 return (
                   <Card
                     key={value}
@@ -48,10 +52,10 @@ export default function StepType({ form }: WizardStepProps) {
                             color: selected ? 'primary.main' : 'text.primary',
                           }}
                         >
-                          {label}
+                          {cardLabel}
                         </Typography>
                         <Typography variant="body2" color="text.secondary">
-                          {desc}
+                          {cardDesc}
                         </Typography>
                       </CardContent>
                     </CardActionArea>
@@ -62,7 +66,7 @@ export default function StepType({ form }: WizardStepProps) {
 
             {errors.type && (
               <Typography color="error" variant="caption" sx={{ mt: 1.5, display: 'block' }}>
-                Please select an application type to continue.
+                {t('wizard.typeStep.error')}
               </Typography>
             )}
           </>

@@ -14,17 +14,19 @@ import {
   Typography,
 } from '@mui/material';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import axios from 'axios';
 import { useAuth, type AuthUser } from '../lib/auth';
 import api from '../lib/api';
 
 const LoginSchema = z.object({
-  email: z.string().email('Please enter a valid email address'),
-  password: z.string().min(1, 'Password is required'),
+  email: z.string().email('emailInvalid'),
+  password: z.string().min(1, 'passwordRequired'),
 });
 type LoginData = z.infer<typeof LoginSchema>;
 
 export default function LoginPage() {
+  const { t } = useTranslation();
   const { setAuth } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -49,14 +51,14 @@ export default function LoginPage() {
     } catch (err: unknown) {
       if (axios.isAxiosError(err)) {
         if (err.response?.status === 401) {
-          setError('Invalid email or password. Please try again.');
+          setError(t('login.errors.invalid'));
         } else if (err.response?.status === 429) {
-          setError('Too many failed attempts. Please wait 15 minutes and try again.');
+          setError(t('login.errors.tooMany'));
         } else {
-          setError('Something went wrong. Please try again.');
+          setError(t('login.errors.generic'));
         }
       } else {
-        setError('Network error. Please check your connection.');
+        setError(t('login.errors.network'));
       }
     } finally {
       setLoading(false);
@@ -86,10 +88,10 @@ export default function LoginPage() {
             </svg>
           </Box>
           <Typography variant="h5" gutterBottom sx={{ fontFamily: "'Lora', serif", fontWeight: 700 }}>
-            Sign In
+            {t('login.title')}
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Sign in to access your pre-application.
+            {t('login.subtitle')}
           </Typography>
         </Box>
 
@@ -101,13 +103,13 @@ export default function LoginPage() {
               render={({ field }) => (
                 <TextField
                   {...field}
-                  label="Email Address"
+                  label={t('login.email')}
                   type="email"
                   required
                   autoComplete="email"
                   autoFocus
                   error={!!errors.email}
-                  helperText={errors.email?.message}
+                  helperText={errors.email && t(`login.errors.${errors.email.message}`)}
                   fullWidth
                 />
               )}
@@ -119,12 +121,12 @@ export default function LoginPage() {
               render={({ field }) => (
                 <TextField
                   {...field}
-                  label="Password"
+                  label={t('login.password')}
                   type="password"
                   required
                   autoComplete="current-password"
                   error={!!errors.password}
-                  helperText={errors.password?.message}
+                  helperText={errors.password && t(`login.errors.${errors.password.message}`)}
                   fullWidth
                 />
               )}
@@ -141,13 +143,13 @@ export default function LoginPage() {
               fullWidth
               startIcon={loading ? <CircularProgress size={16} color="inherit" /> : undefined}
             >
-              {loading ? 'Signing in…' : 'Sign In'}
+              {loading ? t('login.submitting') : t('login.submit')}
             </Button>
 
             <Typography variant="body2" align="center">
-              Don&apos;t have an account?{' '}
+              {t('login.noAccount')}{' '}
               <MuiLink component={Link} to="/register" underline="hover">
-                Create one here
+                {t('login.createOne')}
               </MuiLink>
             </Typography>
           </Box>

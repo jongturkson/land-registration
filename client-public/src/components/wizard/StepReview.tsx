@@ -9,6 +9,7 @@ import {
   Paper,
   Typography,
 } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 import { APP_TYPES, type WizardStepProps } from '../../schemas/wizard.schema';
 
 type Props = WizardStepProps & { submitError: string | null };
@@ -41,129 +42,139 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 }
 
 export default function StepReview({ form, submitError }: Props) {
+  const { t } = useTranslation();
   const { control, getValues, formState: { errors } } = form;
   const data = getValues();
 
-  const typeLabel = APP_TYPES.find((t) => t.value === data.type)?.label ?? data.type ?? '—';
+  const fallbackTypeLabel = APP_TYPES.find((a) => a.value === data.type)?.label ?? data.type ?? '—';
+  const typeLabel = data.type
+    ? t(`wizard.types.${data.type}.label`, { defaultValue: fallbackTypeLabel })
+    : '—';
+  const yes = t('wizard.review.yes');
+  const no = t('wizard.review.no');
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
       <Box>
         <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
-          Review Your Application
+          {t('wizard.review.title')}
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          Verify all information before submitting. Clicking Submit will generate your Récépissé.
+          {t('wizard.review.subtitle')}
         </Typography>
       </Box>
 
-      <Section title="Application Type">
+      <Section title={t('wizard.review.sectionType')}>
         <Typography variant="body2" sx={{ fontWeight: 500 }}>
           {typeLabel}
         </Typography>
       </Section>
 
-      <Section title="Owner Details">
-        <ReviewRow label="Full Name" value={data.owner?.full_name} />
-        <ReviewRow label="Address" value={data.owner?.address} />
-        <ReviewRow label="ID Card No." value={data.owner?.id_card_no} />
-        <ReviewRow label="ID Delivered On" value={data.owner?.id_delivered_on} />
-        <ReviewRow label="Father's Name" value={data.owner?.father_name} />
-        <ReviewRow label="Mother's Name" value={data.owner?.mother_name} />
-        <ReviewRow label="Place of Birth" value={data.owner?.birth_place} />
-        <ReviewRow label="Date of Birth" value={data.owner?.birth_date} />
-        <ReviewRow label="Nationality" value={data.owner?.nationality} />
-        <ReviewRow label="Profession" value={data.owner?.profession} />
-        <ReviewRow label="Marital Status" value={data.owner?.marital_status} />
-        <ReviewRow label="Matrimonial Regime" value={data.owner?.matrimonial_regime} />
+      <Section title={t('wizard.review.sectionOwner')}>
+        <ReviewRow label={t('wizard.review.fullName')} value={data.owner?.full_name} />
+        <ReviewRow label={t('wizard.review.address')} value={data.owner?.address} />
+        <ReviewRow label={t('wizard.review.idCardNo')} value={data.owner?.id_card_no} />
+        <ReviewRow label={t('wizard.review.idDeliveredOn')} value={data.owner?.id_delivered_on} />
+        <ReviewRow label={t('wizard.review.father')} value={data.owner?.father_name} />
+        <ReviewRow label={t('wizard.review.mother')} value={data.owner?.mother_name} />
+        <ReviewRow label={t('wizard.review.birthPlace')} value={data.owner?.birth_place} />
+        <ReviewRow label={t('wizard.review.birthDate')} value={data.owner?.birth_date} />
+        <ReviewRow label={t('wizard.review.nationality')} value={data.owner?.nationality} />
+        <ReviewRow label={t('wizard.review.profession')} value={data.owner?.profession} />
+        <ReviewRow label={t('wizard.review.maritalStatus')} value={data.owner?.marital_status} />
+        <ReviewRow label={t('wizard.review.matrimonialRegime')} value={data.owner?.matrimonial_regime} />
         {data.owner?.acting_on_behalf && (
           <>
             <Divider sx={{ my: 1 }} />
             <Typography variant="caption" color="text.secondary">
-              Acting on behalf of:
+              {t('wizard.review.actingFor')}
             </Typography>
-            <ReviewRow label="Name" value={data.owner?.behalf_name} />
-            <ReviewRow label="ID No." value={data.owner?.behalf_id} />
-            <ReviewRow label="Address" value={data.owner?.behalf_address} />
+            <ReviewRow label={t('wizard.review.name')} value={data.owner?.behalf_name} />
+            <ReviewRow label={t('wizard.review.idNo')} value={data.owner?.behalf_id} />
+            <ReviewRow label={t('wizard.review.address')} value={data.owner?.behalf_address} />
           </>
         )}
       </Section>
 
-      <Section title="Land Details">
-        <ReviewRow label="Land Title No." value={data.land?.title_no} />
-        <ReviewRow label="Plot No." value={data.land?.plot_no} />
-        <ReviewRow label="Block No." value={data.land?.block_no} />
-        <ReviewRow label="Sub-Division" value={data.land?.subdivision} />
-        <ReviewRow label="Division" value={data.land?.division} />
-        <ReviewRow label="Locality (Lieu-dit)" value={data.land?.situation} />
-        <ReviewRow label="Nature & Consistency" value={data.land?.nature} />
+      <Section title={t('wizard.review.sectionLand')}>
+        <ReviewRow label={t('wizard.review.titleNo')} value={data.land?.title_no} />
+        <ReviewRow label={t('wizard.review.plotNo')} value={data.land?.plot_no} />
+        <ReviewRow label={t('wizard.review.blockNo')} value={data.land?.block_no} />
+        <ReviewRow label={t('wizard.review.subdivision')} value={data.land?.subdivision} />
+        <ReviewRow label={t('wizard.review.division')} value={data.land?.division} />
+        <ReviewRow label={t('wizard.review.locality')} value={data.land?.situation} />
+        <ReviewRow label={t('wizard.review.nature')} value={data.land?.nature} />
         <ReviewRow
-          label="Area (Main Title)"
+          label={t('wizard.review.areaMain')}
           value={data.land?.area_main ? `${data.land.area_main} m²` : undefined}
         />
         <ReviewRow
-          label="Area (Partition)"
+          label={t('wizard.review.areaPartition')}
           value={data.land?.area_partition ? `${data.land.area_partition} m²` : undefined}
         />
         <ReviewRow
-          label="Layout Plan"
+          label={t('wizard.review.layoutPlan')}
           value={
             data.land?.has_layout_plan === 'yes'
-              ? 'Yes'
+              ? yes
               : data.land?.has_layout_plan === 'no'
-                ? 'No'
+                ? no
                 : undefined
           }
         />
         {data.land?.has_layout_plan === 'yes' && (
           <ReviewRow
-            label="Plan Approved"
-            value={data.land?.plan_approved === 'yes' ? 'Yes' : 'No'}
+            label={t('wizard.review.planApproved')}
+            value={data.land?.plan_approved === 'yes' ? yes : no}
           />
         )}
-        <ReviewRow label="Boundary — North" value={data.land?.limit_north} />
-        <ReviewRow label="Boundary — South" value={data.land?.limit_south} />
-        <ReviewRow label="Boundary — East" value={data.land?.limit_east} />
-        <ReviewRow label="Boundary — West" value={data.land?.limit_west} />
-        <ReviewRow label="Existing Developments" value={data.land?.developments} />
+        <ReviewRow label={t('wizard.review.north')} value={data.land?.limit_north} />
+        <ReviewRow label={t('wizard.review.south')} value={data.land?.limit_south} />
+        <ReviewRow label={t('wizard.review.east')} value={data.land?.limit_east} />
+        <ReviewRow label={t('wizard.review.west')} value={data.land?.limit_west} />
+        <ReviewRow label={t('wizard.review.developments')} value={data.land?.developments} />
         <ReviewRow
-          label="Value of Developments"
+          label={t('wizard.review.devValue')}
           value={data.land?.dev_value ? `${data.land.dev_value} FCFA` : undefined}
         />
         <ReviewRow
-          label="Occupied by Others"
+          label={t('wizard.review.occupied')}
           value={
             data.land?.others_occupy === 'yes'
-              ? 'Yes'
+              ? yes
               : data.land?.others_occupy === 'no'
-                ? 'No'
+                ? no
                 : undefined
           }
         />
         {data.land?.lat !== undefined && data.land?.lng !== undefined && (
           <ReviewRow
-            label="GPS Coordinates"
+            label={t('wizard.review.gps')}
             value={`${data.land.lat.toFixed(5)}, ${data.land.lng.toFixed(5)}`}
           />
         )}
       </Section>
 
-      <Section title="Documents">
+      <Section title={t('wizard.review.sectionDocs')}>
         <ReviewRow
-          label="ID Card"
-          value={(data.documents?.id_card as File | undefined)?.name ?? 'Not attached'}
+          label={t('wizard.review.idCard')}
+          value={(data.documents?.id_card as File | undefined)?.name ?? t('wizard.review.notAttached')}
         />
         <ReviewRow
-          label="Site Plan"
-          value={(data.documents?.site_plan as File | undefined)?.name ?? 'Not attached'}
+          label={t('wizard.review.sitePlan')}
+          value={(data.documents?.site_plan as File | undefined)?.name ?? t('wizard.review.notAttached')}
         />
         <ReviewRow
-          label="Attestation"
-          value={(data.documents?.attestation as File | undefined)?.name ?? 'Not attached'}
+          label={t('wizard.review.attestation')}
+          value={(data.documents?.attestation as File | undefined)?.name ?? t('wizard.review.notAttached')}
         />
         {((data.documents?.others as File[] | undefined)?.length ?? 0) > 0 &&
           (data.documents?.others as File[]).map((f, i) => (
-            <ReviewRow key={`${f.name}-${i}`} label={i === 0 ? 'Other Documents' : ''} value={f.name} />
+            <ReviewRow
+              key={`${f.name}-${i}`}
+              label={i === 0 ? t('wizard.review.otherDocs') : ''}
+              value={f.name}
+            />
           ))}
       </Section>
 
@@ -181,13 +192,7 @@ export default function StepReview({ form, submitError }: Props) {
                 color="secondary"
               />
             }
-            label={
-              <Typography variant="body2">
-                I declare that all information provided is accurate and complete. I consent to the
-                processing of this application by the Divisional Registry, Buea, under the Land
-                Tenure Ordinance of Cameroon.
-              </Typography>
-            }
+            label={<Typography variant="body2">{t('wizard.review.consent')}</Typography>}
             sx={{ alignItems: 'flex-start' }}
           />
         )}
